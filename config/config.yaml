@@ -1,0 +1,105 @@
+# Temporal Server Configuration
+# https://github.com/temporalio/temporal/blob/master/config/development.yaml
+
+# Configuração do cluster
+cluster:
+  metadata:
+    enableGlobalNamespace: false
+    failoverVersionIncrement: 1
+    initialFailoverVersion: 1
+    clusterInformation:
+      cluster0:
+        enabled: true
+        initialFailoverVersion: 1
+        rpcName: cluster0
+        rpcAddress: "temporal:7233"
+
+# Configuração de retenção global
+# Cada namespace pode sobrescrever
+history:
+  historyArchivalState: "enabled"
+  historyArchivalState: "enabled"
+  defaultRetention: "30d"
+
+# Configurações de persistence
+persistence:
+  defaultStore: default
+  visibilityStore: visibility
+  
+  numHistoryShards: 4
+  
+  datastores:
+    default:
+      sql:
+        driverName: "postgres"
+        connectAddr: "postgresql:5432"
+        connectProtocol: "tcp"
+        user: temporal
+        password: "${POSTGRES_PWD}"
+        databaseName: temporal
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+      encodingType: "thriftrw"
+      
+    visibility:
+      sql:
+        driverName: "postgres"
+        connectAddr: "postgresql:5432"
+        connectProtocol: "tcp"
+        user: temporal
+        password: "${POSTGRES_PWD}"
+        databaseName: temporal_visibility
+        maxConns: 10
+        maxIdleConns: 10
+        maxConnLifetime: "1h"
+      encodingType: "thriftrw"
+
+# Configuração de Archival
+archival:
+  # Histórico de workflows
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  
+  # Visibilidade
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+# Namespace default
+namespaceDefaults:
+  retention: "30d"
+  archival:
+    history:
+      state: "enabled"
+      URI: "minio://minio:9000/temporal-archive"
+    visibility:
+      state: "enabled"
+      URI: "minio://minio:9000/temporal-archive"
+
+# Configurações de autorização
+authorization:
+  jwtKeyProvider:
+    keySourceURIs:
+      - "${AUTH_PROVIDER_URL:-}"
+    refreshInterval: "1m"
+  claimMapper:
+    url: "${AUTH_CLAIM_MAPPER_URL:-}"
+  permissions:
+    - role: "admin"
+      permissions:
+        - "ReadNamespace"
+        - "WriteNamespace"
+    - role: "developer"
+      permissions:
+        - "ReadNamespace"
+        - "WriteNamespace"
