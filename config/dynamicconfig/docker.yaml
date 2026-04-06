@@ -1,0 +1,142 @@
+# Temporal Dynamic Configuration
+# https://docs.temporal.io/cluster-deployment-guide#dynamic-configuration
+# Permite ajustes em runtime sem restart
+
+# ============================================
+# Configurações de Retenção
+# ============================================
+
+# Retenção padrão de 30 dias para todos os namespaces
+history.retention:
+  - value: "2592000s"  # 30 dias em segundos
+    constraints: {}
+
+# Tamanho máximo do histórico por execução
+history.maxPageSize:
+  - value: 5000
+    constraints: {}
+
+# ============================================
+# Configurações de Archive
+# ============================================
+
+# Habilita archive por padrão
+archival.history.state:
+  - value: "enabled"
+    constraints: {}
+
+archival.visibility.state:
+  - value: "enabled"
+    constraints: {}
+
+# Intervalo de arquivamento
+archival.history.interval:
+  - value: "5m"
+    constraints: {}
+
+# ============================================
+# Rate Limiting
+# ============================================
+
+# Limites para namespace default
+frontend.namespaceRPS:
+  - value: 2000
+    constraints:
+      namespace: "default"
+
+frontend.namespaceCountRPS:
+  - value: 500
+    constraints:
+      namespace: "default"
+
+# ============================================
+# Worker Limits
+# ============================================
+
+# Máximo de workflows concurrentes
+worker.maxConcurrentActivityExecutions:
+  - value: 1000
+    constraints: {}
+
+worker.maxConcurrentWorkflowExecutions:
+  - value: 500
+    constraints: {}
+
+# ============================================
+# Autenticação e Autorização
+# ============================================
+
+# Habilita autorização
+authorization.defaultClaimMatcher:
+  - value: "default"
+    constraints: {}
+
+# Header para token JWT
+authorization.authHeaderName:
+  - value: "Authorization"
+    constraints: {}
+
+# Issuer esperado do JWT
+authorization.jwtIssuer:
+  - value: "${AUTH_ISSUER:-}"
+    constraints: {}
+
+# ============================================
+# Logging e Métricas
+# ============================================
+
+# Nível de log
+system.logLevel:
+  - value: "info"
+    constraints: {}
+
+# Métricas habilitadas
+metrics.prometheus:
+  - value: true
+    constraints: {}
+
+# ============================================
+# Performance Tuning
+# ============================================
+
+# Tamanho do cache de histórico
+history.historyCache:
+  - value: 1000
+    constraints: {}
+
+# Intervalo de flush
+history.flushInterval:
+  - value: "1s"
+    constraints: {}
+
+# ============================================
+# Workflow Limits
+# ============================================
+
+# Tamanho máximo de payload
+payload.maxPayloadSizeBytes:
+  - value: 2097152  # 2MB
+    constraints: {}
+
+# Timeout padrão para atividades
+activity.defaultTimeout:
+  - value: "10m"
+    constraints: {}
+
+# ============================================
+# Search Attributes (Custom)
+# ============================================
+
+search.attributes:
+  - value:
+      - CustomStringField:
+          type: Text
+      - CustomIntField:
+          type: Int
+      - CustomBoolField:
+          type: Bool
+      - CustomDatetimeField:
+          type: Datetime
+      - CustomDoubleField:
+          type: Double
+    constraints: {}
