@@ -1,0 +1,54 @@
+temporal:
+  address: temporal:7233
+  frontendAddress: temporal:7233
+
+server:
+  http:
+    writeTimeout: 60s
+  httpLog:
+    disabled: false
+
+auth:
+  enabled: true
+  providers:
+  - label: sso
+    type: oidc
+    providerUrl: http://${TEMPORAL_HOST}:${CASDOOR_PORT}
+    issuerUrl: http://${TEMPORAL_HOST}:${CASDOOR_PORT}
+    clientId: ${OIDC_CLIENT_ID}
+    clientSecret: ${OIDC_CLIENT_SECRET}
+    callbackUrl: http://${TEMPORAL_HOST}:${TEMPORAL_UI_PORT}/auth/sso/callback
+    useIdTokenAsBearer: true
+    scopes:
+      - openid
+      - profile
+      - email
+
+cors:
+  cookieInsecure: false
+  unsafeAllowAllOrigins: false
+  allowOrigins:
+    - "http://${TEMPORAL_HOST}:${TEMPORAL_UI_PORT}"
+    - "http://localhost:${TEMPORAL_UI_PORT}"
+
+tls:
+  caFile: 
+  certFile: 
+  keyFile: 
+  caData: 
+  certData: 
+  keyData: 
+  enableHostVerification: false
+  serverName: 
+
+codec:
+  endpoint: ""
+  passAccessToken: false
+
+defaultNamespace: default
+defaultWorkflowExecutionTimeout: 365d
+notifyOnNewVersion: false
+feedbackURL: ""
+showWorkflowGraph: true
+version:
+  current: 2.48.1

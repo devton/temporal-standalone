@@ -13,6 +13,15 @@ Ambiente Temporal completo com PostgreSQL, Casdoor (OIDC) e UI.
 
 ## Iniciar
 
+1. Copie o arquivo de exemplo e ajuste se necessário:
+
+```bash
+cp .env.example .env
+# Edite .env para mudar TEMPORAL_HOST se precisar acessar via IP
+```
+
+2. Inicie os serviços:
+
 ```bash
 docker compose up -d
 ```
@@ -363,21 +372,21 @@ MIT
 
 ## Nota sobre Rede
 
-Por padrão, todos os serviços usam `localhost`. Se você precisar acessar de outra máquina na rede, altere as URLs nos seguintes arquivos:
+Por padrão, todos os serviços usam `localhost`. Para acessar de outra máquina na rede:
 
-- `docker-compose.yml` (variáveis de ambiente)
-- `config/ui/docker.yaml` (OIDC provider URLs)
-- `scripts/setup-casdoor.sh` (URLs do Casdoor e UI)
+1. Copie o arquivo de ambiente:
+   ```bash
+   cp .env.example .env
+   ```
 
-Exemplo com IP `192.168.1.100`:
+2. Edite `.env` e altere `TEMPORAL_HOST`:
+   ```env
+   TEMPORAL_HOST=192.168.1.100
+   ```
 
-```bash
-# Atualizar todas as referências
-sed -i 's/localhost/192.168.1.100/g' docker-compose.yml config/ui/docker.yaml scripts/setup-casdoor.sh
-```
+3. Reinicie os serviços:
+   ```bash
+   docker compose down && docker compose up -d
+   ```
 
-Após alterar, reinicie os serviços:
-
-```bash
-docker compose down && docker compose up -d
-```
+Todas as URLs (OIDC, callbacks, CORS) serão automaticamente ajustadas.
