@@ -1,0 +1,22 @@
+# Docker Compose Override - Custom Temporal UI with API Keys
+# Usage: docker-compose up -d (automatically merges with docker-compose.yml)
+
+services:
+  temporal-ui:
+    build:
+      context: ~/temporal-open-source-repositories/temporal-ui-custom
+      dockerfile: Dockerfile.custom
+    image: temporal-ui-custom:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      # JWT secret for API key signing (CHANGE THIS IN PRODUCTION!)
+      # Can also be set in config/ui/docker.yaml
+    volumes:
+      - ./config/ui/docker.yaml:/home/ui-server/config/docker.yaml:ro
+      # Persist API keys store (optional, for production use database)
+      - api_keys_data:/home/ui-server/data:rw
+    networks:
+      - temporal-network
+
+volumes:
+  api_keys_data:

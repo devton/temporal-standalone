@@ -1,6 +1,9 @@
 # Environment
 .env
 
+# Secrets
+config/jwt/token.txt
+
 # Backups
 backups/
 

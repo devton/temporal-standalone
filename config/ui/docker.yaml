@@ -1,0 +1,68 @@
+# Temporal UI Config - OIDC enabled
+temporalGrpcAddress: temporal:7233
+port: 8080
+publicPath: 
+enableUi: true
+cloudUi: false
+defaultNamespace: default
+feedbackUrl: 
+refreshInterval: 0s
+showTemporalSystemNamespace: false
+disableWriteActions: false
+workflowTerminateDisabled: false
+workflowCancelDisabled: false
+workflowSignalDisabled: false
+workflowUpdateDisabled: false
+workflowResetDisabled: false
+workflowPauseDisabled: false
+batchActionsDisabled: false
+startWorkflowDisabled: false
+hideWorkflowQueryErrors: false
+refreshWorkflowCountsDisabled: false
+activityCommandsDisabled: false
+cors:
+  cookieInsecure: false
+  unsafeAllowAllOrigins: false
+  allowOrigins:
+    - "http://192.168.2.68:8080"
+    - "http://localhost:8080"
+tls:
+  caFile: 
+  certFile: 
+  keyFile: 
+  caData: 
+  certData: 
+  keyData: 
+  enableHostVerification: false
+  serverName: 
+uiServerTLS:
+  certFile: 
+  keyFile: 
+auth:
+  enabled: true
+  # Secret key for signing API key JWT tokens
+  # CHANGE THIS IN PRODUCTION! Use a strong random string.
+  apiKeyJwtSecret: "temporal-api-key-secret-change-in-production-2024"
+  providers:
+  - label: sso
+    type: oidc
+    providerUrl: http://192.168.2.68:8000
+    issuerUrl: http://192.168.2.68:8000
+    clientId: 8269b3a04ee85269e59c
+    clientSecret: 1ef7a535169058cfa0f65960036a959b390f1447
+    callbackUrl: http://192.168.2.68:8080/auth/sso/callback
+    useIdTokenAsBearer: true
+    scopes:
+      - openid
+      - profile
+      - email
+codec:
+  endpoint: 
+  passAccessToken: false
+  includeCredentials: false
+  defaultErrorMessage: 
+  defaultErrorLink: 
+
+forwardHeaders: []
+
+hideLogs: false

@@ -34,6 +34,37 @@ archival.history.interval:
   - value: "5m"
     constraints: {}
 
+# Filestore (padrão - dados persistem no volume Docker)
+archival.filestore.history:
+  - value:
+      dir: "/tmp/temporal_archival"
+    constraints: {}
+
+archival.filestore.visibility:
+  - value:
+      dir: "/tmp/temporal_vis_archival"
+    constraints: {}
+
+# ============================================
+# S3/MinIO Archive (descomente para usar)
+# Requer: descomentar minio e minio-init no docker-compose.yml
+# ============================================
+# archival.s3.history:
+#   - value:
+#       endpoint: "http://minio:9000"
+#       region: "us-east-1"
+#       bucket: "temporal-archive"
+#       s3-force-path-style: true
+#     constraints: {}
+#
+# archival.s3.visibility:
+#   - value:
+#       endpoint: "http://minio:9000"
+#       region: "us-east-1"
+#       bucket: "temporal-archive"
+#       s3-force-path-style: true
+#     constraints: {}
+
 # ============================================
 # Rate Limiting
 # ============================================
@@ -66,19 +97,26 @@ worker.maxConcurrentWorkflowExecutions:
 # Autenticação e Autorização
 # ============================================
 
-# Habilita autorização
-authorization.defaultClaimMatcher:
-  - value: "default"
+# Habilita autorização JWT
+authorization.claimMapper:
+  - value: "jwt"
     constraints: {}
 
-# Header para token JWT
-authorization.authHeaderName:
-  - value: "Authorization"
+# Configurações do JWT
+authorization.jwtKeyProvider:
+  - value:
+      keySource: "file"
+      keyPath: "/etc/temporal/jwt/key.pub"
     constraints: {}
 
 # Issuer esperado do JWT
 authorization.jwtIssuer:
-  - value: "${AUTH_ISSUER:-}"
+  - value: "temporal-standalone"
+    constraints: {}
+
+# Audience esperado
+authorization.jwtAudience:
+  - value: "temporal"
     constraints: {}
 
 # ============================================
