@@ -4,6 +4,12 @@
 # Secrets
 config/jwt/token.txt
 
+# UI Custom build artifacts
+ui-custom/node_modules/
+ui-custom/.svelte-kit/
+ui-custom/server/ui-server
+ui-custom/server/ui/assets/
+
 # Backups
 backups/
 

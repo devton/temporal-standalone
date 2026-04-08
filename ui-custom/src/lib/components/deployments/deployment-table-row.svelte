@@ -1,0 +1,186 @@
+<script lang="ts">
+  import { page } from '$app/stores';
+
+  import Timestamp from '$lib/components/timestamp.svelte';
+  import Copyable from '$lib/holocene/copyable/index.svelte';
+  import Link from '$lib/holocene/link.svelte';
+  import { translate } from '$lib/i18n/translate';
+  import type { ConfigurableTableHeader } from '$lib/stores/configurable-table-columns';
+  import type { WorkerDeploymentSummary } from '$lib/types/deployments';
+  import { getBuildIdFromVersion } from '$lib/utilities/get-deployment-build-id';
+  import {
+    routeForWorkerDeployment,
+    routeForWorkflowsWithQuery,
+  } from '$lib/utilities/route-for';
+
+  import DeploymentStatus from './deployment-status.svelte';
+
+  type Props = {
+    deployment: WorkerDeploymentSummary;
+    columns: ConfigurableTableHeader[];
+  };
+  let { deployment, columns }: Props = $props();
+
+  const latestBuildId = $derived(
+    deployment?.latestVersionSummary?.deploymentVersion?.buildId,
+  );
+  const rampingBuildId = $derived(
+    deployment?.rampingVersionSummary?.deploymentVersion?.buildId ||
+      getBuildIdFromVersion(deployment?.routingConfig?.rampingVersion),
+  );
+  const rampingVersionDeployedTimestamp = $derived(
+    deployment?.rampingVersionSummary?.createTime ||
+      deployment?.routingConfig?.rampingVersionChangedTime,
+  );
+  const currentBuildId = $derived(
+    deployment?.currentVersionSummary?.deploymentVersion?.buildId ||
+      getBuildIdFromVersion(deployment?.routingConfig?.currentVersion),
+  );
+  const latestNotDuplicate = $derived(
+    latestBuildId !== rampingBuildId && latestBuildId !== currentBuildId,
+  );
+  const versionedCurrent = $derived(currentBuildId !== '__unversioned__');
+  const currentLabel = $derived(
+    versionedCurrent ? currentBuildId : translate('deployments.unversioned'),
+  );
+</script>
+
+<tr>
+  {#each columns as { label } (label)}
+    {#if label === translate('deployments.name')}
+      <td class="py-1 text-left">
+        <Copyable
+          content={deployment.name}
+          copyIconTitle={translate('common.copy-icon-title')}
+          copySuccessIconTitle={translate('common.copy-success-icon-title')}
+        >
+          <Link
+            href={routeForWorkerDeployment({
+              namespace: $page.params.namespace,
+              deployment: deployment.name,
+            })}>{deployment.name}</Link
+          >
+        </Copyable>
+      </td>
+    {:else if label === translate('deployments.build-id')}
+      <td class="whitespace-pre-line break-words py-1 text-left">
+        <div class="flex flex-col gap-1">
+          {#if latestBuildId && latestNotDuplicate}
+            <div class="flex items-center gap-2">
+              <Copyable
+                content={latestBuildId}
+                copyIconTitle={translate('common.copy-icon-title')}
+                copySuccessIconTitle={translate(
+                  'common.copy-success-icon-title',
+                )}
+              >
+                <Link
+                  href={routeForWorkflowsWithQuery({
+                    namespace: $page.params.namespace,
+                    query: `TemporalWorkerDeploymentVersion="${deployment.name}:${latestBuildId}"`,
+                  })}
+                >
+                  {latestBuildId}
+                </Link>
+              </Copyable>
+              <DeploymentStatus
+                status="Latest"
+                label={translate('deployments.latest')}
+              />
+            </div>
+          {/if}
+          {#if rampingBuildId}
+            <div class="flex items-center gap-2">
+              <Copyable
+                content={rampingBuildId}
+                copyIconTitle={translate('common.copy-icon-title')}
+                copySuccessIconTitle={translate(
+                  'common.copy-success-icon-title',
+                )}
+              >
+                <Link
+                  href={routeForWorkflowsWithQuery({
+                    namespace: $page.params.namespace,
+                    query: `TemporalWorkerDeploymentVersion="${deployment.name}:${rampingBuildId}"`,
+                  })}
+                >
+                  {rampingBuildId}
+                </Link>
+              </Copyable>
+              {#if deployment?.routingConfig?.rampingVersionPercentage}
+                <DeploymentStatus
+                  status="Ramping"
+                  label={translate('deployments.ramping-percentage', {
+                    percentage:
+                      deployment.routingConfig.rampingVersionPercentage,
+                  })}
+                />
+              {/if}
+            </div>
+          {/if}
+          <div class="flex items-center gap-2">
+            {#if versionedCurrent}
+              <Copyable
+                content={currentBuildId}
+                copyIconTitle={translate('common.copy-icon-title')}
+                copySuccessIconTitle={translate(
+                  'common.copy-success-icon-title',
+                )}
+              >
+                <Link
+                  href={routeForWorkflowsWithQuery({
+                    namespace: $page.params.namespace,
+                    query: `TemporalWorkerDeploymentVersion="${deployment.name}:${currentBuildId}"`,
+                  })}
+                >
+                  {currentLabel}
+                </Link>
+              </Copyable>
+            {:else}
+              {currentLabel}
+            {/if}
+            {#if versionedCurrent}
+              <DeploymentStatus
+                status="Current"
+                label={translate('deployments.current')}
+              />
+            {/if}
+          </div>
+        </div>
+      </td>
+    {:else if label === translate('deployments.deployed')}
+      <td class="truncate py-1 text-left">
+        <div class="flex flex-col gap-1">
+          {#if latestBuildId && latestNotDuplicate && deployment.latestVersionSummary?.createTime}
+            <Timestamp
+              as="p"
+              dateTime={deployment.latestVersionSummary.createTime}
+            />
+          {/if}
+          {#if rampingBuildId && rampingVersionDeployedTimestamp}
+            <Timestamp as="p" dateTime={rampingVersionDeployedTimestamp} />
+          {/if}
+          {#if versionedCurrent}
+            <Timestamp
+              as="p"
+              dateTime={deployment?.currentVersionSummary?.createTime ||
+                deployment.createTime}
+            />
+          {:else}
+            <p>-</p>
+          {/if}
+        </div>
+      </td>
+    {:else if label === translate('deployments.actions')}
+      <td class="w-24 truncate py-1">
+        <Link
+          icon="external-link"
+          href={routeForWorkflowsWithQuery({
+            namespace: $page.params.namespace,
+            query: `TemporalWorkerDeployment="${deployment.name}"`,
+          })}>{translate('deployments.go-to-workflows')}</Link
+        >
+      </td>
+    {/if}
+  {/each}
+</tr>
