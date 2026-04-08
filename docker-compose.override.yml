@@ -14,8 +14,10 @@ services:
       - TEMPORAL_UI_PORT=${TEMPORAL_UI_PORT:-8080}
       - CASDOOR_PORT=${CASDOOR_PORT:-8000}
       # OIDC Configuration
-      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-8269b3a04ee85269e59c}
-      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-1ef7a535169058cfa0f65960036a959b390f1447}
+      - OIDC_CLIENT_ID=${CASDOOR_CLIENT_ID:-temporal-ui}
+      - OIDC_CLIENT_SECRET=${CASDOOR_CLIENT_SECRET:-temporal-ui-secret}
+      # JWT secret for API key signing
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
     volumes:
       # Persist API keys store (optional, for production use database)
       - api_keys_data:/home/ui-server/data:rw

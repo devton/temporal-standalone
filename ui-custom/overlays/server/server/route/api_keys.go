@@ -43,8 +43,14 @@ type APIKeyClaims struct {
 // In-memory store for API keys (should be replaced with database in production)
 var apiKeysStore = make(map[string]*APIKey)
 
-// JWT secret for signing API key tokens
-var jwtSecret = []byte("temporal-api-key-secret-change-in-production-2024")
+// JWT secret for signing API key tokens (from env JWT_SECRET)
+func getJWTSecret() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "temporal-api-key-secret-change-in-production"
+	}
+	return []byte(secret)
+}
 
 // generateKeyID generates a random key ID
 func generateKeyID() (string, error) {
@@ -80,7 +86,7 @@ func generateJWTToken(apiKey *APIKey) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(getJWTSecret())
 }
 
 // getOwnerIDFromContext extracts the owner ID from the auth context
