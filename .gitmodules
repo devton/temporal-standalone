@@ -1,0 +1,3 @@
+[submodule "ui-custom/upstream"]
+	path = ui-custom/upstream
+	url = https://github.com/temporalio/ui.git
