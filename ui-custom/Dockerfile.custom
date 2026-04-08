@@ -12,6 +12,10 @@ RUN npm install -g pnpm@latest
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
+# Copy config files needed for prepare script
+COPY svelte.config.js vite.config.ts tsconfig.json ./
+COPY scripts/ ./scripts/
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 

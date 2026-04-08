@@ -4,7 +4,7 @@
 services:
   temporal-ui:
     build:
-      context: ~/temporal-open-source-repositories/temporal-ui-custom
+      context: ./ui-custom
       dockerfile: Dockerfile.custom
     image: temporal-ui-custom:latest
     environment:
