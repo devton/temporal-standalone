@@ -43,7 +43,7 @@ services:
       - isDemoMode=false
       - builtinOsrmMaptileUrl=
       - enableGzip=true
-      - origin=http://192.168.2.68:8000
+      - origin=http://localhost:8000
     volumes:
       - casdoor_data:/storage
     ports:
@@ -76,7 +76,7 @@ services:
       - POSTGRES_SEEDS=postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/docker.yaml
       # OIDC Authentication (via Casdoor)
-      - TEMPORAL_JWT_KEY_SOURCE1=http://192.168.2.68:8000/.well-known/jwks
+      - TEMPORAL_JWT_KEY_SOURCE1=http://localhost:8000/.well-known/jwks
     volumes:
       - ./config/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
       - archive_data:/tmp/temporal_archival:rw

@@ -4,8 +4,8 @@
 
 set -e
 
-CASDOOR_URL="http://192.168.2.68:8000"
-PUBLIC_IP="192.168.2.68"
+CASDOOR_URL="http://localhost:8000"
+PUBLIC_IP="localhost"
 
 echo "=== Casdoor Setup for Temporal ==="
 

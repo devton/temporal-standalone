@@ -6,10 +6,10 @@ Ambiente Temporal completo com PostgreSQL, Casdoor (OIDC) e UI.
 
 | Serviço | Porta | URL |
 |---------|-------|-----|
-| Temporal Server | 7233 | `192.168.2.68:7233` |
-| Temporal UI | 8080 | http://192.168.2.68:8080 |
-| Casdoor (OIDC) | 8000 | http://192.168.2.68:8000 |
-| PostgreSQL | 5432 | `192.168.2.68:5432` |
+| Temporal Server | 7233 | `localhost:7233` |
+| Temporal UI | 8080 | http://localhost:8080 |
+| Casdoor (OIDC) | 8000 | http://localhost:8000 |
+| PostgreSQL | 5432 | `localhost:5432` |
 
 ## Iniciar
 
@@ -44,7 +44,7 @@ Acesse o Casdoor Admin UI e configure manualmente.
 
 #### 1. Acessar Casdoor Admin
 
-Abra http://192.168.2.68:8000
+Abra http://localhost:8000
 
 - **Usuário:** admin
 - **Senha:** 123
@@ -56,7 +56,7 @@ Abra http://192.168.2.68:8000
 2. Preencha:
    - **Name:** `temporal`
    - **DisplayName:** Temporal
-   - **Website:** `http://192.168.2.68:8080`
+   - **Website:** `http://localhost:8080`
 3. Clique em **Save**
 
 #### 3. Criar Aplicação
@@ -68,8 +68,8 @@ Abra http://192.168.2.68:8000
    - **Client ID:** `temporal-ui`
    - **Client secret:** `temporal-ui-secret`
    - **Redirect URLs:** 
-     - `http://192.168.2.68:8080/auth/callback`
-     - `http://192.168.2.68:8080`
+     - `http://localhost:8080/auth/callback`
+     - `http://localhost:8080`
    - **Token format:** JWT
    - **Expire in hours:** 168 (7 dias)
    - **Grant types:** authorization_code, refresh_token
@@ -88,7 +88,7 @@ Abra http://192.168.2.68:8000
 
 #### 5. Testar Login
 
-1. Acesse http://192.168.2.68:8080
+1. Acesse http://localhost:8080
 2. Você será redirecionado para o Casdoor
 3. Faça login com:
    - **Organization:** temporal
@@ -124,14 +124,14 @@ docker exec temporal-server temporal operator namespace update default \
 
 ```bash
 # Sem auth (server sem auth habilitado)
-temporal workflow list --address 192.168.2.68:7233
+temporal workflow list --address localhost:7233
 
 # Listar namespaces
-temporal operator namespace list --address 192.168.2.68:7233
+temporal operator namespace list --address localhost:7233
 
 # Executar workflow de teste
 temporal workflow execute \
-  --address 192.168.2.68:7233 \
+  --address localhost:7233 \
   --namespace default \
   --task-queue test \
   --type test \
@@ -147,7 +147,7 @@ import "go.temporal.io/sdk/client"
 
 func main() {
     c, err := client.Dial(client.Options{
-        HostPort:  "192.168.2.68:7233",
+        HostPort:  "localhost:7233",
         Namespace: "default",
     })
     if err != nil {
@@ -166,7 +166,7 @@ from temporalio.client import Client
 
 async def main():
     client = await Client.connect(
-        "192.168.2.68:7233",
+        "localhost:7233",
         namespace="default"
     )
     
@@ -179,7 +179,7 @@ async def main():
 import { Client } from '@temporalio/client';
 
 const client = new Client({
-  address: '192.168.2.68:7233',
+  address: 'localhost:7233',
   namespace: 'default',
 });
 
@@ -236,7 +236,7 @@ O token será salvo em `config/jwt/token.txt`.
 
 ```bash
 export TEMPORAL_CLI_AUTH_TOKEN=$(cat config/jwt/token.txt)
-temporal workflow list --address 192.168.2.68:7233
+temporal workflow list --address localhost:7233
 ```
 
 ## Arquitetura
@@ -264,7 +264,7 @@ temporal workflow list --address 192.168.2.68:7233
 
 1. Verifique se Auth está habilitado:
    ```bash
-   curl http://192.168.2.68:8080/api/v1/settings | jq .Auth
+   curl http://localhost:8080/api/v1/settings | jq .Auth
    ```
 2. Verifique os logs: `docker logs temporal-ui`
 3. Reinicie a UI: `docker compose restart temporal-ui`
@@ -273,7 +273,7 @@ temporal workflow list --address 192.168.2.68:7233
 
 1. Verifique se o Casdoor está acessível:
    ```bash
-   curl http://192.168.2.68:8000/.well-known/openid-configuration
+   curl http://localhost:8000/.well-known/openid-configuration
    ```
 2. Verifique se a aplicação existe no Casdoor
 3. Verifique se o Client ID/Secret estão corretos
@@ -360,3 +360,24 @@ cat backup_visibility.sql | docker exec -i temporal-postgres psql -U temporal
 ## Licença
 
 MIT
+
+## Nota sobre Rede
+
+Por padrão, todos os serviços usam `localhost`. Se você precisar acessar de outra máquina na rede, altere as URLs nos seguintes arquivos:
+
+- `docker-compose.yml` (variáveis de ambiente)
+- `config/ui/docker.yaml` (OIDC provider URLs)
+- `scripts/setup-casdoor.sh` (URLs do Casdoor e UI)
+
+Exemplo com IP `192.168.1.100`:
+
+```bash
+# Atualizar todas as referências
+sed -i 's/localhost/192.168.1.100/g' docker-compose.yml config/ui/docker.yaml scripts/setup-casdoor.sh
+```
+
+Após alterar, reinicie os serviços:
+
+```bash
+docker compose down && docker compose up -d
+```

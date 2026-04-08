@@ -5,8 +5,8 @@
 set -e
 
 # Configuration
-CASDOOR_URL="${CASDOOR_URL:-http://192.168.2.68:8000}"
-TEMPORAL_UI_URL="${TEMPORAL_UI_URL:-http://192.168.2.68:8080}"
+CASDOOR_URL="${CASDOOR_URL:-http://localhost:8000}"
+TEMPORAL_UI_URL="${TEMPORAL_UI_URL:-http://localhost:8080}"
 
 # Colors
 RED='\033[0;31m'

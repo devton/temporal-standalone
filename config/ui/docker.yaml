@@ -24,7 +24,7 @@ cors:
   cookieInsecure: false
   unsafeAllowAllOrigins: false
   allowOrigins:
-    - "http://192.168.2.68:8080"
+    - "http://localhost:8080"
     - "http://localhost:8080"
 tls:
   caFile: 
@@ -46,11 +46,11 @@ auth:
   providers:
   - label: sso
     type: oidc
-    providerUrl: http://192.168.2.68:8000
-    issuerUrl: http://192.168.2.68:8000
+    providerUrl: http://localhost:8000
+    issuerUrl: http://localhost:8000
     clientId: 8269b3a04ee85269e59c
     clientSecret: 1ef7a535169058cfa0f65960036a959b390f1447
-    callbackUrl: http://192.168.2.68:8080/auth/sso/callback
+    callbackUrl: http://localhost:8080/auth/sso/callback
     useIdTokenAsBearer: true
     scopes:
       - openid
