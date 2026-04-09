@@ -1,5 +1,5 @@
 # enable-template
-# Temporal UI Config - Simple OIDC config for testing
+# Temporal UI Config - OIDC via environment variables
 
 temporalGrpcAddress: temporal:7233
 port: 8080
@@ -10,7 +10,7 @@ cors:
   cookieInsecure: true
   unsafeAllowAllOrigins: false
   allowOrigins:
-    - "http://192.168.2.68:8080"
+    - "http://{{ env "TEMPORAL_HOST" }}:8080"
     - "http://localhost:8080"
 tls:
   enableHostVerification: false
@@ -20,10 +20,10 @@ auth:
   - label: sso
     type: oidc
     providerUrl: http://casdoor:8000
-    issuerUrl: http://192.168.2.68:8000
-    clientId: 8269b3a04ee85269e59c
-    clientSecret: 1ef7a535169058cfa0f65960036a959b390f1447
-    callbackUrl: http://192.168.2.68:8080/auth/sso/callback
+    issuerUrl: http://{{ env "TEMPORAL_HOST" }}:8000
+    clientId: {{ env "CASDOOR_CLIENT_ID" }}
+    clientSecret: {{ env "CASDOOR_CLIENT_SECRET" }}
+    callbackUrl: http://{{ env "TEMPORAL_HOST" }}:8080/auth/sso/callback
     useIdTokenAsBearer: true
     scopes:
       - openid
