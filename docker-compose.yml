@@ -126,10 +126,11 @@ services:
       # OIDC Configuration via env
       - TEMPORAL_OIDC_ISSUER_URL=http://${TEMPORAL_HOST:-localhost}:${CASDOOR_PORT:-8000}
       - TEMPORAL_OIDC_CLIENT_ID=8269b3a04ee85269e59c
-      - TEMPORAL_OIDC_CLIENT_SECRET=1ef7a535169058cfa0f65960036a959b390f1447
+      - TEMPORAL_OIDC_CLIENT_SECRET=1ef7a5...1447
       - TEMPORAL_OIDC_CALLBACK_URL=http://${TEMPORAL_HOST:-localhost}:${TEMPORAL_UI_PORT:-8080}/auth/sso/callback
-    volumes:
-      - ./config/ui/docker.yaml:/home/ui-server/config/docker.yaml:ro
+    # NOTE: Volume mount removed - custom UI has config baked in via docker-compose.override.yml
+    # volumes:
+    #   - ./config/ui/docker.yaml:/home/ui-server/config/docker.yaml:ro
     ports:
       - "${TEMPORAL_UI_PORT:-8080}:8080"
     networks:

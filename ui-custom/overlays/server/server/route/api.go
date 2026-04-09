@@ -83,8 +83,8 @@ func SetAPIRoutes(e *echo.Echo, cfgProvider *config.ConfigProviderWithRefresh, a
 
 	route.Match([]string{"GET", "POST", "PUT", "PATCH", "DELETE"}, "/*", api.TemporalAPIHandler(cfgProvider, apiMiddleware, conn), writeControlMiddleware)
 
-	// Register API Key routes (custom feature)
-	RegisterAPIKeyRoutes(route)
+	// Register API Key routes (custom feature) with auth middleware
+	RegisterAPIKeyRoutes(route, cfgProvider)
 
 	return nil
 }

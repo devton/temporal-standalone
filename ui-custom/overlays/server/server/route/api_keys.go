@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
+	"github.com/temporalio/ui-server/v2/server/config"
 )
 
 // APIKey represents an API key for SDK access
@@ -92,16 +93,30 @@ func generateJWTToken(apiKey *APIKey) (string, error) {
 
 // getOwnerIDFromContext extracts the owner ID from the auth context
 func getOwnerIDFromContext(c echo.Context) string {
-	// Try to get from JWT claims in context
+	// Try to get UserInfo from context (set by AuthMiddleware)
+	if user := c.Get(UserContextKey); user != nil {
+		if userInfo, ok := user.(*UserInfo); ok {
+			if userInfo.Subject != "" {
+				return userInfo.Subject
+			}
+		}
+	}
+
+	// Fallback: Try to get from JWT claims in context (direct JWT middleware)
 	if user := c.Get("user"); user != nil {
 		if claims, ok := user.(*jwt.Token); ok {
 			if mapClaims, ok := claims.Claims.(jwt.MapClaims); ok {
 				if sub, ok := mapClaims["sub"].(string); ok {
 					return sub
 				}
+				// Try email as fallback
+				if email, ok := mapClaims["email"].(string); ok {
+					return email
+				}
 			}
 		}
 	}
+
 	// Fallback to a default owner
 	return "default-user"
 }
@@ -195,9 +210,12 @@ func DeleteAPIKey(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// RegisterAPIKeyRoutes registers the API key routes
-func RegisterAPIKeyRoutes(e *echo.Group) {
-	api := e.Group("/api-keys")
+// RegisterAPIKeyRoutes registers the API key routes with auth middleware
+func RegisterAPIKeyRoutes(e *echo.Group, cfgProvider *config.ConfigProviderWithRefresh) {
+	// Create auth middleware for API Key routes
+	authMW := AuthMiddleware(cfgProvider)
+
+	api := e.Group("/api-keys", authMW)
 
 	api.GET("", ListAPIKeys)
 	api.POST("", CreateAPIKey)
