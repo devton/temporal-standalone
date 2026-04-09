@@ -92,12 +92,12 @@ func generateJWTToken(apiKey *APIKey) (string, error) {
 }
 
 // getOwnerIDFromContext extracts the owner ID from the auth context
-func getOwnerIDFromContext(c echo.Context) string {
+func getOwnerIDFromContext(c echo.Context) (string, error) {
 	// Try to get UserInfo from context (set by AuthMiddleware)
 	if user := c.Get(UserContextKey); user != nil {
 		if userInfo, ok := user.(*UserInfo); ok {
 			if userInfo.Subject != "" {
-				return userInfo.Subject
+				return userInfo.Subject, nil
 			}
 		}
 	}
@@ -107,23 +107,26 @@ func getOwnerIDFromContext(c echo.Context) string {
 		if claims, ok := user.(*jwt.Token); ok {
 			if mapClaims, ok := claims.Claims.(jwt.MapClaims); ok {
 				if sub, ok := mapClaims["sub"].(string); ok {
-					return sub
+					return sub, nil
 				}
 				// Try email as fallback
 				if email, ok := mapClaims["email"].(string); ok {
-					return email
+					return email, nil
 				}
 			}
 		}
 	}
 
-	// Fallback to a default owner
-	return "default-user"
+	// No authenticated user found
+	return "", echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
 }
 
 // ListAPIKeys returns all API keys for the current user
 func ListAPIKeys(c echo.Context) error {
-	ownerID := getOwnerIDFromContext(c)
+	ownerID, err := getOwnerIDFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	keys := make([]*APIKey, 0)
 	for _, key := range apiKeysStore {
@@ -161,7 +164,10 @@ func CreateAPIKey(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate key secret")
 	}
 
-	ownerID := getOwnerIDFromContext(c)
+	ownerID, err := getOwnerIDFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	apiKey := &APIKey{
 		ID:          keyID,
@@ -194,7 +200,10 @@ func DeleteAPIKey(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Key ID is required")
 	}
 
-	ownerID := getOwnerIDFromContext(c)
+	ownerID, err := getOwnerIDFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	key, exists := apiKeysStore[keyID]
 	if !exists {

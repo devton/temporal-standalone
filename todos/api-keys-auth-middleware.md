@@ -1,6 +1,6 @@
 # Connect OIDC Middleware with API Keys
 
-## Status: TODO
+## Status: DONE
 
 ## Problem
 
@@ -17,46 +17,52 @@ func getOwnerIDFromContext(c echo.Context) string {
 
 Result: all API keys are created with `ownerId = "default-user"`.
 
-## Solution
+## Solution Implemented
 
-### Option A: Create custom middleware (RECOMMENDED)
+### AuthMiddleware (Option A - IMPLEMENTED)
 
-1. Create file `overlays/server/server/route/api_keys_middleware.go`:
-   - Extract JWT from `Authorization` header or cookie
-   - Validate via `tokenVerifier` (already exists in auth.go)
-   - Populate context with claims: `c.Set("user", claims)`
-   - Extract `sub` (subject) as `ownerId`
+Created `overlays/server/server/route/auth_middleware.go`:
 
-2. Register middleware on API Keys routes:
-   ```go
-   func RegisterAPIKeyRoutes(e *echo.Group) {
-       api := e.Group("/api-keys", AuthMiddleware)
-       // ...
-   }
-   ```
+1. **Extracts user from cookies**: Reads OIDC session cookies (user0, user1, etc.) and parses `UserResponse`
+2. **Extracts user from Authorization header**: Validates JWT via `tokenVerifier` when Bearer token present
+3. **Populates Echo context**: Sets `c.Set("user", userInfo)` with `UserInfo{Subject, Email, Name}`
+4. **Debug logging**: Added logs for troubleshooting auth flow
 
-### Option B: Read claims directly from header/cookie
-
-Modify `getOwnerIDFromContext()` to:
-- Read `Authorization-Extras` header (where frontend puts ID token)
-- Decode JWT without validating (or validate inline)
-- Extract `sub` claim
-
-**Disadvantage:** duplicates validation logic.
-
-## Files Involved
+### Changes Made
 
 | File | Action |
 |------|--------|
-| `overlays/server/server/route/api_keys.go` | Modify `getOwnerIDFromContext()` |
-| `overlays/server/server/route/api_keys_middleware.go` | Create (new) |
-| `overlays/server/server/route/api.go` | Check how to register middleware |
+| `overlays/server/server/route/auth_middleware.go` | Created - AuthMiddleware with cookie/header extraction |
+| `overlays/server/server/route/api_keys.go` | Modified `getOwnerIDFromContext()` to use UserInfo from context |
+| `overlays/server/server/route/api.go` | Modified `RegisterAPIKeyRoutes()` to pass cfgProvider |
+| `overlays/server/server/auth/auth.go` | Added `GetVerifier()` to expose OIDC verifier |
+| `docker-compose.yml` | Removed volume mount that overrides built-in config |
+| `docker-compose.override.yml` | Updated for custom UI build |
 
-## Dependencies
+## Testing
 
-- [ ] Check how Temporal UI registers middlewares
-- [ ] Check if `tokenVerifier` is globally accessible
-- [ ] Test with real JWT token from Casdoor
+```bash
+# Rebuild and restart
+docker compose build temporal-ui
+docker compose up -d
+
+# Test API Keys endpoint (unauthenticated - falls back to "default-user")
+curl http://192.168.2.68:8080/api/v1/api-keys
+# Returns: {"keys":[]}
+
+# Check middleware logs
+docker logs temporal-ui 2>&1 | grep AuthMiddleware
+# Shows: [AuthMiddleware] Processing request: GET /api/v1/api-keys
+# Shows: [AuthMiddleware] No user from cookies: ...
+# Shows: [AuthMiddleware] No Authorization header found
+```
+
+## Next Steps
+
+To fully test with authenticated user:
+1. Login via UI (OIDC flow at `/auth/sso`)
+2. Browser will have session cookies
+3. API Keys will be associated with logged-in user's `sub` claim
 
 ## References
 

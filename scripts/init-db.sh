@@ -2,9 +2,10 @@
 set -e
 
 # Cria os bancos de dados necessários para o Temporal e Casdoor
+# Todos no mesmo PostgreSQL 18
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-    -- Database para visibility
+    -- Database para visibility (search/queries)
     CREATE DATABASE temporal_visibility;
     GRANT ALL PRIVILEGES ON DATABASE temporal_visibility TO temporal;
     
