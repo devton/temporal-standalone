@@ -19,15 +19,15 @@ RUN go mod download && make build-server
 
 # Stage 3: Final
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata bash gettext
+RUN apk add --no-cache ca-certificates tzdata bash
 WORKDIR /home/ui-server
 RUN addgroup -g 1000 temporal && adduser -u 1000 -G temporal -D temporal
 
 # Copy built server
 COPY --from=server-builder /home/server-builder/ui-server ./
 
-# Copy config template (will be processed at runtime)
-COPY --from=frontend-builder /app/server/config/docker.yaml.template ./config/docker.yaml.template
+# Copy config file (supports templating)
+COPY --from=frontend-builder /app/server/config/docker.yaml ./config/docker.yaml
 
 # Copy startup script
 COPY --from=frontend-builder /app/server/docker/start-ui-server.sh ./start-ui-server.sh
@@ -35,5 +35,5 @@ COPY --from=frontend-builder /app/server/docker/start-ui-server.sh ./start-ui-se
 USER temporal
 EXPOSE 8080
 
-# Generate config from template and start server
-CMD envsubst < config/docker.yaml.template > config/docker.yaml && exec ./start-ui-server.sh
+# Start server (config templating is handled by the server itself)
+CMD ["./start-ui-server.sh"]

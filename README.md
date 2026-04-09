@@ -1,144 +1,144 @@
 # Temporal Standalone
 
-Ambiente Temporal completo com PostgreSQL, Casdoor (OIDC) e UI.
+Complete Temporal environment with PostgreSQL, Casdoor (OIDC), and UI.
 
-## Serviços
+## Services
 
-| Serviço | Porta | URL |
-|---------|-------|-----|
+| Service | Port | URL |
+|---------|------|-----|
 | Temporal Server | 7233 | `localhost:7233` |
 | Temporal UI | 8080 | http://localhost:8080 |
 | Casdoor (OIDC) | 8000 | http://localhost:8000 |
 | PostgreSQL | 5432 | `localhost:5432` |
 
-## Iniciar
+## Quick Start
 
-1. Copie o arquivo de exemplo e ajuste se necessário:
+1. Copy the example file and adjust if needed:
 
 ```bash
 cp .env.example .env
-# Edite .env para mudar TEMPORAL_HOST se precisar acessar via IP
+# Edit .env to change TEMPORAL_HOST if you need to access via IP
 ```
 
-2. Inicie os serviços:
+2. Start the services:
 
 ```bash
 docker compose up -d
 ```
 
-Aguarde todos os serviços ficarem healthy:
+Wait for all services to become healthy:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-## Configurar OIDC (Casdoor)
+## Configure OIDC (Casdoor)
 
-### Opção A: Script Automático
+### Option A: Automatic Script
 
-Execute o script de configuração:
+Run the setup script:
 
 ```bash
 ./scripts/setup-casdoor.sh
 ```
 
-O script cria automaticamente:
-- Organização `temporal`
-- Aplicação `temporal-ui` com Client ID/Secret
-- Usuário de teste `testuser` com senha `Temporal123!`
+The script automatically creates:
+- Organization `temporal`
+- Application `temporal-ui` with Client ID/Secret
+- Test user `testuser` with password `Temporal123!`
 
-### Opção B: Configuração Manual
+### Option B: Manual Configuration
 
-Acesse o Casdoor Admin UI e configure manualmente.
+Access Casdoor Admin UI and configure manually.
 
-#### 1. Acessar Casdoor Admin
+#### 1. Access Casdoor Admin
 
-Abra http://localhost:8000
+Open http://localhost:8000
 
-- **Usuário:** admin
-- **Senha:** 123
-- **Organização:** built-in
+- **User:** admin
+- **Password:** 123
+- **Organization:** built-in
 
-#### 2. Criar Organização
+#### 2. Create Organization
 
-1. Vá em **Organizations** → **Add**
-2. Preencha:
+1. Go to **Organizations** → **Add**
+2. Fill in:
    - **Name:** `temporal`
    - **DisplayName:** Temporal
    - **Website:** `http://localhost:8080`
-3. Clique em **Save**
+3. Click **Save**
 
-#### 3. Criar Aplicação
+#### 3. Create Application
 
-1. Vá em **Applications** → **Add**
-2. Preencha:
+1. Go to **Applications** → **Add**
+2. Fill in:
    - **Organization:** temporal
    - **Name:** `temporal-ui`
    - **Client ID:** `temporal-ui`
    - **Client secret:** `temporal-ui-secret`
-   - **Redirect URLs:** 
+   - **Redirect URLs:**
      - `http://localhost:8080/auth/callback`
      - `http://localhost:8080`
    - **Token format:** JWT
-   - **Expire in hours:** 168 (7 dias)
+   - **Expire in hours:** 168 (7 days)
    - **Grant types:** authorization_code, refresh_token
-3. Clique em **Save**
+3. Click **Save**
 
-#### 4. Criar Usuário de Teste
+#### 4. Create Test User
 
-1. Vá em **Users** → **Add**
-2. Preencha:
+1. Go to **Users** → **Add**
+2. Fill in:
    - **Organization:** temporal
    - **Name:** `testuser`
    - **Password:** `Temporal123!`
    - **Email:** `testuser@temporal.local`
    - **Email verified:** true
-3. Clique em **Save**
+3. Click **Save**
 
-#### 5. Testar Login
+#### 5. Test Login
 
-1. Acesse http://localhost:8080
-2. Você será redirecionado para o Casdoor
-3. Faça login com:
+1. Access http://localhost:8080
+2. You will be redirected to Casdoor
+3. Login with:
    - **Organization:** temporal
    - **Username:** testuser
    - **Password:** `Temporal123!`
-4. Após login, será redirecionado de volta para a UI
+4. After login, you will be redirected back to the UI
 
 ## Namespaces
 
-O namespace `default` está configurado com:
+The `default` namespace is configured with:
 
-- **Retention:** 720h (30 dias)
-- **History Archival:** Habilitado (`file:///tmp/temporal_archival/development`)
-- **Visibility Archival:** Habilitado (`file:///tmp/temporal_vis_archival/development`)
+- **Retention:** 720h (30 days)
+- **History Archival:** Enabled (`file:///tmp/temporal_archival/development`)
+- **Visibility Archival:** Enabled (`file:///tmp/temporal_vis_archival/development`)
 
-### Verificar Namespace
+### Verify Namespace
 
 ```bash
 docker exec temporal-server temporal operator namespace describe default
 ```
 
-### Atualizar Namespace
+### Update Namespace
 
 ```bash
-# Habilitar archival (já feito pelo setup)
+# Enable archival (already done by setup)
 docker exec temporal-server temporal operator namespace update default \
   --history-archival-state enabled \
   --visibility-archival-state enabled \
   --retention 720h
 ```
 
-## Usar com CLI
+## Using with CLI
 
 ```bash
-# Sem auth (server sem auth habilitado)
+# Without auth (server without auth enabled)
 temporal workflow list --address localhost:7233
 
-# Listar namespaces
+# List namespaces
 temporal operator namespace list --address localhost:7233
 
-# Executar workflow de teste
+# Execute test workflow
 temporal workflow execute \
   --address localhost:7233 \
   --namespace default \
@@ -147,7 +147,7 @@ temporal workflow execute \
   --input '"hello"'
 ```
 
-## Usar com SDK
+## Using with SDK
 
 ### Go
 
@@ -164,7 +164,7 @@ func main() {
     }
     defer c.Close()
     
-    // Usar client...
+    // Use client...
 }
 ```
 
@@ -179,7 +179,7 @@ async def main():
         namespace="default"
     )
     
-    # Usar client...
+    # Use client...
 ```
 
 ### TypeScript
@@ -192,30 +192,30 @@ const client = new Client({
   namespace: 'default',
 });
 
-// Usar client...
+// Use client...
 ```
 
 ## Archival
 
-Os workflows arquivados ficam em volumes Docker:
+Archived workflows are stored in Docker volumes:
 
 - **History:** `archive_data` → `/tmp/temporal_archival`
 - **Visibility:** `archive_vis_data` → `/tmp/temporal_vis_archival`
 
-### Verificar Archival
+### Verify Archival
 
 ```bash
-# Listar arquivos no container
+# List files in container
 docker exec temporal-server ls -la /tmp/temporal_archival/development/
 docker exec temporal-server ls -la /tmp/temporal_vis_archival/development/
 ```
 
 ### MinIO (S3 Backend)
 
-Para usar MinIO como backend S3:
+To use MinIO as S3 backend:
 
-1. Descomente as seções `minio` e `minio-init` no `docker-compose.yml`
-2. Atualize o `dynamicconfig/docker.yaml`:
+1. Uncomment `minio` and `minio-init` sections in `docker-compose.yml`
+2. Update `dynamicconfig/docker.yaml`:
 
 ```yaml
 history.archival:
@@ -231,24 +231,24 @@ history.archival:
         usePathStyleAccess: true
 ```
 
-## JWT Token Manual
+## Manual JWT Token
 
-Para gerar um token JWT manual (para testes com CLI):
+To generate a JWT token manually (for CLI testing):
 
 ```bash
 ./scripts/generate-jwt.sh
 ```
 
-O token será salvo em `config/jwt/token.txt`.
+The token will be saved to `config/jwt/token.txt`.
 
-### Usar Token
+### Use Token
 
 ```bash
 export TEMPORAL_CLI_AUTH_TOKEN=$(cat config/jwt/token.txt)
 temporal workflow list --address localhost:7233
 ```
 
-## Arquitetura
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -269,59 +269,59 @@ temporal workflow list --address localhost:7233
 
 ## Troubleshooting
 
-### UI não redireciona para login
+### UI doesn't redirect to login
 
-1. Verifique se Auth está habilitado:
+1. Check if Auth is enabled:
    ```bash
    curl http://localhost:8080/api/v1/settings | jq .Auth
    ```
-2. Verifique os logs: `docker logs temporal-ui`
-3. Reinicie a UI: `docker compose restart temporal-ui`
+2. Check logs: `docker logs temporal-ui`
+3. Restart UI: `docker compose restart temporal-ui`
 
-### Erro "discovery failed" no login
+### "discovery failed" error on login
 
-1. Verifique se o Casdoor está acessível:
+1. Check if Casdoor is accessible:
    ```bash
    curl http://localhost:8000/.well-known/openid-configuration
    ```
-2. Verifique se a aplicação existe no Casdoor
-3. Verifique se o Client ID/Secret estão corretos
+2. Check if the application exists in Casdoor
+3. Verify Client ID/Secret are correct
 
-### Casdoor não inicia
+### Casdoor doesn't start
 
-1. Verifique se o banco `casdoor` foi criado:
+1. Check if `casdoor` database was created:
    ```bash
    docker exec temporal-postgres psql -U postgres -l | grep casdoor
    ```
-2. Se não existir, crie manualmente:
+2. If not, create it manually:
    ```bash
    docker exec temporal-postgres psql -U postgres -c "CREATE DATABASE casdoor;"
    ```
 
-### Server não inicia
+### Server doesn't start
 
-1. Verifique os logs:
+1. Check logs:
    ```bash
    docker logs temporal-server 2>&1 | tail -50
    ```
-2. Problemas comuns:
-   - Banco não está pronto: aguarde mais tempo
-   - JWT key source inválido: verifique a URL do Casdoor
-   - Auth habilitado sem configuração completa: desabilite auth no server
+2. Common issues:
+   - Database not ready: wait longer
+   - Invalid JWT key source: check Casdoor URL
+   - Auth enabled without complete configuration: disable auth on server
 
-### Workflow arquivado não aparece
+### Archived workflow doesn't appear
 
-1. Verifique se o archival está habilitado no namespace
-2. Verifique se o workflow foi fechado há mais tempo que o retention
-3. Verifique os arquivos de archival no container
+1. Check if archival is enabled on the namespace
+2. Check if the workflow was closed longer than retention time
+3. Check archival files in the container
 
-## Configuração Avançada
+## Advanced Configuration
 
-### Habilitar Auth no Server
+### Enable Auth on Server
 
-Para habilitar autenticação no servidor Temporal (não apenas na UI):
+To enable authentication on the Temporal server (not just UI):
 
-1. Atualize `dynamicconfig/docker.yaml`:
+1. Update `dynamicconfig/docker.yaml`:
 
 ```yaml
 frontend.auth:
@@ -335,26 +335,26 @@ frontend.auth:
         name: "default"
 ```
 
-2. Adicione ao `docker-compose.yml`:
+2. Add to `docker-compose.yml`:
 
 ```yaml
 environment:
   - TEMPORAL_JWT_KEY_SOURCE1=http://casdoor:8000/.well-known/jwks
 ```
 
-**Atenção:** Isso pode bloquear workflows internos do sistema. Use com cuidado.
+**Warning:** This may block internal system workflows. Use with caution.
 
-### Múltiplos Namespaces
+### Multiple Namespaces
 
 ```bash
-# Criar namespace de produção
+# Create production namespace
 temporal operator namespace create production \
   --retention 720h \
   --history-archival-state enabled \
   --visibility-archival-state enabled
 ```
 
-### Backup do PostgreSQL
+### PostgreSQL Backup
 
 ```bash
 # Backup
@@ -366,27 +366,27 @@ cat backup_temporal.sql | docker exec -i temporal-postgres psql -U temporal
 cat backup_visibility.sql | docker exec -i temporal-postgres psql -U temporal
 ```
 
-## Licença
+## License
 
 MIT
 
-## Nota sobre Rede
+## Network Note
 
-Por padrão, todos os serviços usam `localhost`. Para acessar de outra máquina na rede:
+By default, all services use `localhost`. To access from another machine on the network:
 
-1. Copie o arquivo de ambiente:
+1. Copy the environment file:
    ```bash
    cp .env.example .env
    ```
 
-2. Edite `.env` e altere `TEMPORAL_HOST`:
+2. Edit `.env` and change `TEMPORAL_HOST`:
    ```env
    TEMPORAL_HOST=192.168.1.100
    ```
 
-3. Reinicie os serviços:
+3. Restart services:
    ```bash
    docker compose down && docker compose up -d
    ```
 
-Todas as URLs (OIDC, callbacks, CORS) serão automaticamente ajustadas.
+All URLs (OIDC, callbacks, CORS) will be automatically adjusted.

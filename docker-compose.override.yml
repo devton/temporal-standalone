@@ -9,15 +9,24 @@ services:
     image: temporal-ui-custom:latest
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
-      # Host configuration (from .env)
+      # Host configuration (from .env) - for browser redirects
       - TEMPORAL_HOST=${TEMPORAL_HOST:-localhost}
       - TEMPORAL_UI_PORT=${TEMPORAL_UI_PORT:-8080}
       - CASDOOR_PORT=${CASDOOR_PORT:-8000}
-      # OIDC Configuration
-      - OIDC_CLIENT_ID=${CASDOOR_CLIENT_ID:-temporal-ui}
-      - OIDC_CLIENT_SECRET=${CASDOOR_CLIENT_SECRET:-temporal-ui-secret}
+      # OIDC Configuration - use casdoor service name for internal communication
+      - TEMPORAL_AUTH_ENABLED=true
+      - TEMPORAL_AUTH_LABEL=sso
+      - TEMPORAL_AUTH_TYPE=oidc
+      - TEMPORAL_AUTH_PROVIDER_URL=http://casdoor:8000
+      - TEMPORAL_AUTH_ISSUER_URL=http://${TEMPORAL_HOST:-localhost}:${CASDOOR_PORT:-8000}
+      - TEMPORAL_AUTH_CLIENT_ID=${CASDOOR_CLIENT_ID:-temporal-ui}
+      - TEMPORAL_AUTH_CLIENT_SECRET=${CASDOOR_CLIENT_SECRET:-temporal-secret}
+      - TEMPORAL_AUTH_CALLBACK_URL=http://${TEMPORAL_HOST:-localhost}:${TEMPORAL_UI_PORT:-8080}/auth/sso/callback
+      - TEMPORAL_AUTH_SCOPES=openid,profile,email
       # JWT secret for API key signing
-      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - JWT_SECRET=${JWT_SECRET:-temporal-jwt-secret-change-in-production}
+      # CORS
+      - TEMPORAL_CORS_ORIGINS=http://${TEMPORAL_HOST:-localhost}:${TEMPORAL_UI_PORT:-8080}
     volumes:
       # Persist API keys store (optional, for production use database)
       - api_keys_data:/home/ui-server/data:rw
