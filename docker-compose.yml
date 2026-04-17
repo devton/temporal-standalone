@@ -61,10 +61,13 @@ services:
       start_period: 30s
 
   # ============================================
-  # Temporal Server (com auto-setup)
+  # Temporal Server
+  # Uses temporalio/server (no auto-setup) — schema must exist already.
+  # auto-setup was replaced because it re-runs schema migration on every restart,
+  # which resets namespace retention and archival settings.
   # ============================================
   temporal:
-    image: temporalio/auto-setup:1.24.3
+    image: temporalio/server:1.24.3
     container_name: temporal-server
     depends_on:
       postgresql:
@@ -75,6 +78,7 @@ services:
       # Main database (workflow history)
       - DB=postgres12
       - DB_PORT=5432
+      - DBNAME=temporal
       - POSTGRES_USER=temporal
       - POSTGRES_PWD=temporal
       - POSTGRES_SEEDS=postgresql
@@ -104,6 +108,8 @@ services:
 
   # ============================================
   # Configure Namespaces (retention + archive)
+  # Runs after server is healthy, re-applies settings on every restart
+  # to ensure retention/archive survive server restarts.
   # ============================================
   temporal-setup:
     image: temporalio/admin-tools:latest
@@ -118,6 +124,7 @@ services:
       - TEMPORAL_CLI_ADDRESS=temporal:7233
     networks:
       - temporal-network
+    restart: "no"
 
   # ============================================
   # Temporal Web UI (com OIDC)

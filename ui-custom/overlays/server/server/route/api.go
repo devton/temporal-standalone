@@ -86,5 +86,8 @@ func SetAPIRoutes(e *echo.Echo, cfgProvider *config.ConfigProviderWithRefresh, a
 	// Register API Key routes (custom feature) with auth middleware
 	RegisterAPIKeyRoutes(route, cfgProvider)
 
+	// Register namespace-per-user routes (auto-create user namespace)
+	RegisterNamespaceUserRoutes(route, conn, cfgProvider)
+
 	return nil
 }

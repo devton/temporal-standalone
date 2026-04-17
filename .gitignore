@@ -39,3 +39,11 @@ Thumbs.db
 *.log
 logs/
 upstream/
+
+# Upstream artifacts that leak into ui-custom during build
+ui-custom/.claude/
+ui-custom/.dockerignore
+ui-custom/.editorconfig
+ui-custom/.storybook/
+ui-custom/pnpm-lock.yaml
+ui-custom/tests/

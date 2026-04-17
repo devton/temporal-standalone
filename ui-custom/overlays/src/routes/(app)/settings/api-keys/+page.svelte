@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getAuthUser } from '$lib/stores/auth-user';
   import PageTitle from '$lib/components/page-title.svelte';
   import Panel from '$lib/components/panel.svelte';
+  import Button from '$lib/holocene/button.svelte';
+  import Input from '$lib/holocene/input/input.svelte';
 
   interface APIKey {
     id: string;
@@ -15,21 +18,63 @@
     lastUsedAt?: string;
   }
 
-  let keys: APIKey[] = [];
-  let loading = true;
-  let error = '';
-  let showCreateModal = false;
-  let newKeyName = '';
-  let newKeyDescription = '';
-  let createdKey: APIKey | null = null;
-  let copying = false;
+  let keys: APIKey[] = $state([]);
+  let loading = $state(true);
+  let error = $state('');
+  let showModal = $state(false);
+  let newKeyName = $state('');
+  let newKeyDescription = $state('');
+  let createdKey: APIKey | null = $state(null);
+  let copying = $state(false);
+
+  function getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Caller-Type': 'operator',
+    };
+
+    const user = getAuthUser();
+    if (user?.accessToken) {
+      headers['Authorization'] = `Bearer ${user.accessToken}`;
+    }
+    if (user?.idToken) {
+      headers['Authorization-Extras'] = user.idToken;
+    }
+
+    try {
+      const cookies = document.cookie.split(';');
+      const csrfCookie = cookies.find((c) => c.includes('_csrf='));
+      if (csrfCookie) {
+        headers['X-CSRF-TOKEN'] = csrfCookie.trim().slice('_csrf='.length);
+      }
+    } catch {}
+
+    return headers;
+  }
+
+  async function apiFetch<T>(
+    url: string,
+    options: RequestInit = {},
+  ): Promise<T> {
+    const res = await fetch(url, {
+      ...options,
+      headers: { ...getHeaders(), ...(options.headers || {}) },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `Request failed: ${res.status}`);
+    }
+
+    if (res.status === 204) return {} as T;
+    return res.json();
+  }
 
   async function loadKeys() {
     try {
       loading = true;
-      const response = await fetch('/api/v1/api-keys');
-      if (!response.ok) throw new Error('Failed to load API keys');
-      const data = await response.json();
+      const data = await apiFetch<{ keys: APIKey[] }>('/api/v1/api-keys');
       keys = data.keys || [];
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load API keys';
@@ -40,17 +85,16 @@
 
   async function createKey() {
     try {
-      const response = await fetch('/api/v1/api-keys', {
+      error = '';
+      const key = await apiFetch<APIKey>('/api/v1/api-keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newKeyName,
           description: newKeyDescription,
         }),
       });
-      if (!response.ok) throw new Error('Failed to create API key');
-      createdKey = await response.json();
-      showCreateModal = false;
+      createdKey = key;
+      showModal = false;
       newKeyName = '';
       newKeyDescription = '';
       await loadKeys();
@@ -62,15 +106,14 @@
   async function deleteKey(id: string) {
     if (!confirm('Are you sure you want to delete this API key?')) return;
     try {
-      const response = await fetch(`/api/v1/api-keys/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete API key');
+      await apiFetch<void>(`/api/v1/api-keys/${id}`, { method: 'DELETE' });
       await loadKeys();
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to delete API key';
     }
   }
 
-  async function copyToClipboard(text: string) {
+  async function copyToken(text: string) {
     copying = true;
     await navigator.clipboard.writeText(text);
     setTimeout(() => (copying = false), 2000);
@@ -78,6 +121,21 @@
 
   function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleString();
+  }
+
+  function openModal() {
+    showModal = true;
+    newKeyName = '';
+    newKeyDescription = '';
+    error = '';
+  }
+
+  function closeModal() {
+    showModal = false;
+  }
+
+  function dismissCreatedKey() {
+    createdKey = null;
   }
 
   onMount(loadKeys);
@@ -90,53 +148,77 @@
 <PageTitle>API Keys</PageTitle>
 
 {#if error}
-  <div class="error-banner">{error}</div>
+  <div class="mb-4 rounded bg-red-500/10 p-4 text-sm text-red-500">{error}</div>
 {/if}
 
 {#if createdKey}
   <Panel>
-    <h2>API Key Created</h2>
-    <p>Your new API key has been created. Copy the token below - it will only be shown once:</p>
-    <div class="token-display">
-      <code>{createdKey.keySecret}</code>
-      <button on:click={() => copyToClipboard(createdKey!.keySecret || '')}>
+    <h2 class="text-xl font-semibold text-primary">API Key Created</h2>
+    <p class="mt-2 text-sm text-subtle">
+      Copy the token below — it will only be shown once.
+    </p>
+    <div class="mt-4 flex items-center gap-2">
+      <code
+        class="flex-1 break-all rounded border border-secondary bg-surface-secondary px-3 py-2 text-sm text-primary"
+      >
+        {createdKey.keySecret}
+      </code>
+      <Button
+        variant="secondary"
+        size="sm"
+        on:click={() => copyToken(createdKey!.keySecret || '')}
+      >
         {copying ? 'Copied!' : 'Copy'}
-      </button>
+      </Button>
     </div>
-    <button on:click={() => (createdKey = null)}>Close</button>
+    <div class="mt-4">
+      <Button variant="ghost" on:click={dismissCreatedKey}>Close</Button>
+    </div>
   </Panel>
 {/if}
 
 <Panel>
-  <div class="header-row">
-    <h2>Your API Keys</h2>
-    <button on:click={() => (showCreateModal = true)}>Create API Key</button>
+  <div class="mb-4 flex items-center justify-between">
+    <h2 class="text-xl font-semibold text-primary">Your API Keys</h2>
+    <Button on:click={openModal}>
+      + Create API Key
+    </Button>
   </div>
 
   {#if loading}
-    <p>Loading...</p>
+    <p class="text-subtle">Loading...</p>
   {:else if keys.length === 0}
-    <p>No API keys yet. Create one to get started.</p>
+    <p class="text-subtle">No API keys yet. Create one to get started.</p>
   {:else}
-    <table>
+    <table class="w-full border-collapse">
       <thead>
-        <tr>
-          <th>Name</th>
-          <th>Key ID</th>
-          <th>Created</th>
-          <th>Last Used</th>
-          <th>Actions</th>
+        <tr class="border-b border-secondary text-left text-sm text-subtle">
+          <th class="px-3 py-2 font-medium">Name</th>
+          <th class="px-3 py-2 font-medium">Key ID</th>
+          <th class="px-3 py-2 font-medium">Description</th>
+          <th class="px-3 py-2 font-medium">Created</th>
+          <th class="px-3 py-2 font-medium">Last Used</th>
+          <th class="px-3 py-2 font-medium">Actions</th>
         </tr>
       </thead>
       <tbody>
         {#each keys as key}
-          <tr>
-            <td>{key.name}</td>
-            <td><code>{key.keyId}</code></td>
-            <td>{formatDate(key.createdAt)}</td>
-            <td>{key.lastUsedAt ? formatDate(key.lastUsedAt) : 'Never'}</td>
-            <td>
-              <button on:click={() => deleteKey(key.id)} class="delete-btn">Delete</button>
+          <tr class="border-b border-secondary text-sm text-primary">
+            <td class="px-3 py-3">{key.name}</td>
+            <td class="px-3 py-3 font-mono text-xs">{key.keyId}</td>
+            <td class="px-3 py-3">{key.description || '—'}</td>
+            <td class="px-3 py-3">{formatDate(key.createdAt)}</td>
+            <td class="px-3 py-3">
+              {key.lastUsedAt ? formatDate(key.lastUsedAt) : 'Never'}
+            </td>
+            <td class="px-3 py-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                on:click={() => deleteKey(key.id)}
+              >
+                Delete
+              </Button>
             </td>
           </tr>
         {/each}
@@ -145,102 +227,52 @@
   {/if}
 </Panel>
 
-{#if showCreateModal}
-  <div class="modal-overlay">
-    <div class="modal">
-      <h2>Create New API Key</h2>
-      <label>
-        Name
-        <input type="text" bind:value={newKeyName} placeholder="My API Key" />
-      </label>
-      <label>
-        Description (optional)
-        <input type="text" bind:value={newKeyDescription} placeholder="Used for..." />
-      </label>
-      <div class="modal-actions">
-        <button on:click={() => (showCreateModal = false)}>Cancel</button>
-        <button on:click={createKey} disabled={!newKeyName}>Create</button>
+{#if showModal}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+    on:click={closeModal}
+    on:keydown={() => {}}
+  >
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="w-full max-w-lg rounded-lg border border-secondary bg-surface-primary p-6 shadow-xl"
+      on:click={(e) => e.stopPropagation()}
+      on:keydown={() => {}}
+    >
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-primary">Create New API Key</h2>
+        <button
+          class="flex h-8 w-8 items-center justify-center rounded-full text-subtle hover:bg-surface-secondary hover:text-primary"
+          on:click={closeModal}
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="mb-4">
+        <Input
+          id="api-key-name"
+          label="Name"
+          placeholder="My API Key"
+          bind:value={newKeyName}
+          required={true}
+        />
+      </div>
+
+      <div class="mb-4">
+        <Input
+          id="api-key-description"
+          label="Description"
+          placeholder="Used for..."
+          bind:value={newKeyDescription}
+        />
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <Button variant="ghost" on:click={closeModal}>Cancel</Button>
+        <Button on:click={createKey} disabled={!newKeyName}>Create</Button>
       </div>
     </div>
   </div>
 {/if}
-
-<style>
-  .header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .error-banner {
-    background: #fee;
-    color: #c00;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
-  }
-
-  .token-display {
-    display: flex;
-    gap: 0.5rem;
-    margin: 1rem 0;
-  }
-
-  .token-display code {
-    flex: 1;
-    padding: 0.5rem;
-    background: #f5f5f5;
-    border-radius: 4px;
-    word-break: break-all;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  th, td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-  }
-
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .modal {
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    min-width: 400px;
-  }
-
-  .modal label {
-    display: block;
-    margin-bottom: 1rem;
-  }
-
-  .modal input {
-    width: 100%;
-    padding: 0.5rem;
-    margin-top: 0.25rem;
-  }
-
-  .modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1rem;
-  }
-
-  .delete-btn {
-    color: #c00;
-  }
-</style>
