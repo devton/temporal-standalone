@@ -40,24 +40,6 @@ const toNamespaceDetails = (
   return namespace;
 };
 
-function getUserNamespacePrefix(): string {
-  const user = getAuthUser();
-  if (!user?.email && !user?.name) return '';
-
-  const name = (user.email || user.name || '').toLowerCase();
-  const sanitized = name
-    .replace(/@/g, '-at-')
-    .replace(/\./g, '-')
-    .replace(/_/g, '-')
-    .replace(/ /g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .substring(0, 60);
-
-  return 'usr-' + sanitized;
-}
-
 export async function fetchNamespaces(
   settings: Settings,
   request = fetch,
@@ -70,6 +52,36 @@ export async function fetchNamespaces(
   }
 
   try {
+    // If auth is enabled, use the backend endpoint that filters by owner
+    if (settings.auth.enabled) {
+      const user = getAuthUser();
+      if (user?.accessToken) {
+        const userNamespaces = await fetchUserNamespaces(request);
+        if (userNamespaces !== null) {
+          // userNamespaces is an array of {name, type, description, state}
+          // We need to describe each one to get full details
+          const detailed: DescribeNamespaceResponse[] = [];
+          for (const ns of userNamespaces) {
+            try {
+              const route = routeForApi('namespace', { namespace: ns.name });
+              const result = await requestFromAPI<DescribeNamespaceResponse>(route, {
+                request,
+                onError: () => {},
+              });
+              if (result) {
+                detailed.push(toNamespaceDetails(result));
+              }
+            } catch {
+              // Skip namespaces we can't describe
+            }
+          }
+          namespaces.set(detailed);
+          return;
+        }
+      }
+    }
+
+    // Fallback: standard namespace listing (no auth or no token)
     const route = routeForApi('namespaces');
     const results = await paginated(async (token: string) =>
       requestFromAPI<ListNamespacesResponse>(route, {
@@ -83,25 +95,75 @@ export async function fetchNamespaces(
       }),
     );
 
-    const userPrefix = settings.auth.enabled ? getUserNamespacePrefix() : '';
-
     const _namespaces: DescribeNamespaceResponse[] = (results?.namespaces ?? [])
       .filter(
         (namespace: DescribeNamespaceResponse) =>
           showTemporalSystemNamespace ||
           namespace.namespaceInfo.name !== 'temporal-system',
       )
-      .filter((namespace: DescribeNamespaceResponse) => {
-        if (!userPrefix) return true;
-        const name = namespace.namespaceInfo.name;
-        return name === userPrefix || name === 'default';
-      })
       .map(toNamespaceDetails);
 
     namespaces.set(_namespaces);
   } catch {
     namespaces.set([]);
   }
+}
+
+async function fetchUserNamespaces(
+  request: typeof fetch,
+): Promise<Array<{ name: string; type: string; description: string; state: string }> | null> {
+  try {
+    const res = await request('/api/v1/user/namespaces', {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.namespaces ?? [];
+    }
+  } catch (e) {
+    console.error('[namespaces-service] fetchUserNamespaces failed:', e);
+  }
+  return null;
+}
+
+export async function createNamespace(
+  description?: string,
+  request = fetch,
+): Promise<{ namespace: string; type: string; description: string } | null> {
+  try {
+    const body: Record<string, string> = {};
+    if (description) {
+      body.description = description;
+    }
+
+    const res = await request('/api/v1/user/namespaces', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok || res.status === 201) {
+      return await res.json();
+    }
+
+    const errData = await res.json().catch(() => ({}));
+    toaster.push({
+      variant: 'error',
+      message: errData.message || 'Failed to create namespace',
+    });
+  } catch (e) {
+    console.error('[namespaces-service] createNamespace failed:', e);
+    toaster.push({
+      variant: 'error',
+      message: 'Failed to create namespace',
+    });
+  }
+  return null;
 }
 
 export async function fetchNamespace(
