@@ -131,10 +131,12 @@ func parseUnverifiedJWT(tokenString string) (*UserInfo, error) {
 	}
 
 	var subject string
-	if sub, ok := claims["sub"].(string); ok && sub != "" {
-		subject = sub
-	} else if email, ok := claims["email"].(string); ok && email != "" {
+	if email, ok := claims["email"].(string); ok && email != "" {
 		subject = email
+	} else if preferredUsername, ok := claims["preferred_username"].(string); ok && preferredUsername != "" {
+		subject = preferredUsername
+	} else if sub, ok := claims["sub"].(string); ok && sub != "" {
+		subject = sub
 	} else if name, ok := claims["name"].(string); ok && name != "" {
 		subject = name
 	}

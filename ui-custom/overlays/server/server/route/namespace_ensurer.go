@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/temporalio/ui-server/v2/server/config"
 )
@@ -77,22 +76,12 @@ func (ne *NamespaceEnsurer) createNamespace(nsName, username string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	_, err := operatorservice.NewOperatorServiceClient(ne.conn).CreateNamespace(ctx, &operatorservice.CreateNamespaceRequest{
-		Namespace: &replication.NamespaceInfo{
-			Name:        nsName,
-			State:       replication.NamespaceInfo_REGISTERED,
-			Owner:       username,
-			Description: fmt.Sprintf("Auto-created namespace for user %s", username),
-		},
-		Config: &replication.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: &defaultRetention,
-			HistoryArchivalState:          replication.NamespaceInfo_DISABLED,
-			VisibilityArchivalState:       replication.NamespaceInfo_DISABLED,
-		},
-		ReplicationConfig: &replication.NamespaceReplicationConfig{
-			ActiveClusterName: "active",
-		},
-		IsGlobalNamespace: false,
+	_, err := workflowservice.NewWorkflowServiceClient(ne.conn).RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        nsName,
+		Description:                      fmt.Sprintf("Auto-created namespace for user %s", username),
+		OwnerEmail:                       username,
+		WorkflowExecutionRetentionPeriod: durationpb.New(defaultRetention),
+		IsGlobalNamespace:                false,
 	})
 
 	return err
@@ -120,5 +109,7 @@ func HandleEnsureNamespace(ensurer *NamespaceEnsurer) echo.HandlerFunc {
 
 func RegisterNamespaceUserRoutes(e *echo.Group, conn *grpc.ClientConn, cfgProvider *config.ConfigProviderWithRefresh) {
 	ensurer := NewNamespaceEnsurer(conn)
-	e.POST("/user/ensure-namespace", HandleEnsureNamespace(ensurer))
+	authMW := AuthMiddleware(cfgProvider)
+	user := e.Group("/user", authMW)
+	user.POST("/ensure-namespace", HandleEnsureNamespace(ensurer))
 }

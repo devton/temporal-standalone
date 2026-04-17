@@ -93,7 +93,8 @@ export async function fetchNamespaces(
       )
       .filter((namespace: DescribeNamespaceResponse) => {
         if (!userPrefix) return true;
-        return namespace.namespaceInfo.name === userPrefix;
+        const name = namespace.namespaceInfo.name;
+        return name === userPrefix || name === 'default';
       })
       .map(toNamespaceDetails);
 
