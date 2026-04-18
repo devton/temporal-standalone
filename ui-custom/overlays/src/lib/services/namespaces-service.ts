@@ -58,7 +58,7 @@ export async function fetchNamespaces(
         namespaces.set([]);
         return;
       }
-      const userNamespaces = await fetchUserNamespaces(request);
+      const userNamespaces = await fetchUserNamespaces(request, user);
       if (userNamespaces !== null) {
         const detailed: DescribeNamespaceResponse[] = [];
         for (const ns of userNamespaces) {
@@ -109,12 +109,22 @@ export async function fetchNamespaces(
   }
 }
 
+function authHeaders(user: { accessToken?: string; idToken?: string } | null): Record<string, string> {
+  if (!user) return {};
+  const headers: Record<string, string> = {};
+  if (user.accessToken) headers['Authorization'] = `Bearer ${user.accessToken}`;
+  if (user.idToken) headers['Authorization-Extras'] = user.idToken;
+  return headers;
+}
+
 async function fetchUserNamespaces(
   request: typeof fetch,
+  user: { accessToken?: string; idToken?: string } | null,
 ): Promise<Array<{ name: string; type: string; description: string; state: string }> | null> {
   try {
     const res = await request('/api/v1/user/namespaces', {
       method: 'GET',
+      headers: authHeaders(user),
       credentials: 'include',
     });
 
@@ -132,6 +142,7 @@ export async function createNamespace(
   description?: string,
   request = fetch,
 ): Promise<{ namespace: string; type: string; description: string } | null> {
+  const user = getAuthUser();
   try {
     const body: Record<string, string> = {};
     if (description) {
@@ -142,6 +153,7 @@ export async function createNamespace(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(user),
       },
       credentials: 'include',
       body: JSON.stringify(body),
