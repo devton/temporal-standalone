@@ -52,36 +52,36 @@ export async function fetchNamespaces(
   }
 
   try {
-    // If auth is enabled, use the backend endpoint that filters by owner
     if (settings.auth.enabled) {
       const user = getAuthUser();
-      if (user?.accessToken) {
-        const userNamespaces = await fetchUserNamespaces(request);
-        if (userNamespaces !== null) {
-          // userNamespaces is an array of {name, type, description, state}
-          // We need to describe each one to get full details
-          const detailed: DescribeNamespaceResponse[] = [];
-          for (const ns of userNamespaces) {
-            try {
-              const route = routeForApi('namespace', { namespace: ns.name });
-              const result = await requestFromAPI<DescribeNamespaceResponse>(route, {
-                request,
-                onError: () => {},
-              });
-              if (result) {
-                detailed.push(toNamespaceDetails(result));
-              }
-            } catch {
-              // Skip namespaces we can't describe
-            }
-          }
-          namespaces.set(detailed);
-          return;
-        }
+      if (!user?.accessToken) {
+        namespaces.set([]);
+        return;
       }
+      const userNamespaces = await fetchUserNamespaces(request);
+      if (userNamespaces !== null) {
+        const detailed: DescribeNamespaceResponse[] = [];
+        for (const ns of userNamespaces) {
+          try {
+            const route = routeForApi('namespace', { namespace: ns.name });
+            const result = await requestFromAPI<DescribeNamespaceResponse>(route, {
+              request,
+              onError: () => {},
+            });
+            if (result) {
+              detailed.push(toNamespaceDetails(result));
+            }
+          } catch {
+            // Skip namespaces we can't describe
+          }
+        }
+        namespaces.set(detailed);
+        return;
+      }
+      namespaces.set([]);
+      return;
     }
 
-    // Fallback: standard namespace listing (no auth or no token)
     const route = routeForApi('namespaces');
     const results = await paginated(async (token: string) =>
       requestFromAPI<ListNamespacesResponse>(route, {
