@@ -1,0 +1,33 @@
+# Test the Railway monolith locally
+# Usage: docker compose -f docker-compose.test-railway.yml up --build
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  monolith:
+    build:
+      context: .
+      dockerfile: Dockerfile.railway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://temporal:temporal@postgres:5432/temporal"
+      TEMPORAL_HOST: "localhost"
+      DB: "postgres12"
+    ports:
+      - "8080:8080"   # UI
+      - "8000:8000"   # Casdoor
+      - "7233:7233"   # Temporal gRPC

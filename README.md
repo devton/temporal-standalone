@@ -2,7 +2,7 @@
 
 Complete Temporal environment with PostgreSQL, Casdoor (OIDC), and UI.
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new?repo=github.com/devton/temporal-standalone&branch=railway-compose)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new?repo=github.com/devton/temporal-standalone)
 
 ## Services
 

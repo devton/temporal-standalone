@@ -1,0 +1,72 @@
+# Temporal Standalone - Railway Monolith
+# Single container: Temporal Server + Custom UI + Casdoor (supervisord)
+# PostgreSQL via Railway plugin (DATABASE_URL provided automatically)
+
+# ============================================
+# Stage 1: Build Temporal UI Custom (Frontend)
+# ============================================
+FROM node:22-alpine AS ui-frontend
+WORKDIR /app
+COPY ui-custom/upstream/ ./
+COPY ui-custom/overlays/ /overlays/
+RUN cp -r /overlays/* ./
+RUN npm install -g pnpm@latest && pnpm install --frozen-lockfile
+RUN pnpm build:server
+
+# ============================================
+# Stage 2: Build Temporal UI Custom (Backend)
+# ============================================
+FROM golang:1.24-alpine AS ui-backend
+RUN apk add --no-cache make git curl
+WORKDIR /home/server-builder
+COPY --from=ui-frontend /app/server/ ./
+RUN go mod download && make build-server
+
+# ============================================
+# Stage 3: Build Casdoor
+# ============================================
+FROM golang:1.24-alpine AS casdoor-builder
+RUN apk add --no-cache git
+WORKDIR /build
+RUN git clone --depth 1 --branch v1.693.0 https://github.com/casbin/casdoor.git .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /casdoor-server .
+
+# ============================================
+# Stage 4: Final Monolith (based on auto-setup)
+# ============================================
+FROM temporalio/auto-setup:1.24.3
+
+USER root
+
+# Install runtime dependencies (Alpine-based image)
+RUN apk add --no-cache curl jq supervisor bash postgresql-client
+
+# ---- Temporal UI Custom ----
+WORKDIR /home/ui-server
+COPY --from=ui-backend /home/server-builder/ui-server ./
+COPY --from=ui-frontend /app/server/config/docker.yaml ./config/docker.yaml
+COPY --from=ui-frontend /app/server/docker/start-ui-server.sh ./start-ui-server.sh
+
+# ---- Casdoor ----
+WORKDIR /opt/casdoor
+COPY --from=casdoor-builder /casdoor-server ./casdoor-server
+RUN mkdir -p conf
+
+# ---- Config files ----
+COPY config/temporal/dynamicconfig/docker.yaml /etc/temporal/config/dynamicconfig/docker.yaml
+COPY railway/casdoor-conf/app.conf /opt/casdoor/conf/app.conf
+
+# ---- Scripts ----
+COPY railway/entrypoint.sh /entrypoint.sh
+COPY railway/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY railway/start-temporal.sh /opt/temporal/start.sh
+COPY railway/start-ui.sh /home/ui-server/start-railway.sh
+COPY railway/init-casdoor.sh /opt/casdoor/init-casdoor.sh
+
+RUN chmod +x /entrypoint.sh /opt/temporal/start.sh /home/ui-server/start-railway.sh /opt/casdoor/init-casdoor.sh
+
+# Ports: UI=8080, Casdoor=8000, Temporal gRPC=7233
+EXPOSE 8080 8000 7233
+
+WORKDIR /
+ENTRYPOINT ["/entrypoint.sh"]
