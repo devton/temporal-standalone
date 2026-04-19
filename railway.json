@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "dockerCompose": {
+      "file": "docker-compose.railway.yml"
+    }
+  }
+}
