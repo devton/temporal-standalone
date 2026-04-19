@@ -15,9 +15,9 @@ Railway PostgreSQL Plugin
 
 ## One-Click Deploy
 
-[Click here to deploy on Railway](https://railway.app/new)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/temporal-standalone?referralCode=devton&repo=github.com/devton/temporal-standalone&branch=railway-compose)
 
-Or manually: Create a new project from this repo, select `railway-compose` branch.
+Or manually: Create a new project → "Deploy from GitHub repo" → `devton/temporal-standalone` → `railway-compose` branch.
 
 ## Step-by-Step Setup
 
