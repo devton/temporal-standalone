@@ -1,3 +1,4 @@
+
 # Temporal Standalone - Production Ready
 # PostgreSQL 18 + Temporal Server + Temporal UI + Casdoor (OIDC)
 # Single PostgreSQL with separate databases for main and visibility
@@ -20,6 +21,7 @@ services:
       - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U temporal"]
       interval: 10s
@@ -32,7 +34,7 @@ services:
   # Casdoor - OIDC Identity Provider
   # ============================================
   casdoor:
-    image: casbin/casdoor:v1.693.0
+    image: casbin/casdoor:3.49.0
     container_name: temporal-casdoor
     depends_on:
       postgresql:
@@ -59,6 +61,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
 
   # ============================================
   # Temporal Server
@@ -67,7 +70,7 @@ services:
   # which resets namespace retention and archival settings.
   # ============================================
   temporal:
-    image: temporalio/server:1.24.3
+    image: temporalio/server:1.31.0
     container_name: temporal-server
     depends_on:
       postgresql:
@@ -105,6 +108,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+    restart: unless-stopped
 
   # ============================================
   # Configure Namespaces (retention + archive)
@@ -130,7 +134,7 @@ services:
   # Temporal Web UI (com OIDC)
   # ============================================
   temporal-ui:
-    image: temporalio/ui:2.48.1
+    image: temporalio/ui:2.49.1
     container_name: temporal-ui
     depends_on:
       temporal:
@@ -152,6 +156,7 @@ services:
       - "${TEMPORAL_UI_PORT:-8080}:8080"
     networks:
       - temporal-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:

@@ -5,10 +5,13 @@ Instructions for AI coding agents working on the temporal-standalone project.
 ## Project Overview
 
 Temporal Standalone is a complete Temporal development environment with:
-- **Temporal Server** (v1.24.3) with PostgreSQL
-- **Temporal UI** (v2.48.1) with custom API Keys feature
-- **Casdoor** (OIDC Provider) for authentication
+- **Temporal Server** (v1.31.0) with PostgreSQL 18
+- **Temporal UI** (v2.49.x + custom overlays) with API Keys feature
+- **Casdoor** (v3.49.0, OIDC Provider) for authentication
 - **Custom UI** built via Git Submodule + Overlays approach
+- **Standalone Activities**: Server ready, namespace capability pending
+
+> **Start here for skills:** `skills/temporal-standalone/SKILL.md`
 
 ## Quick Start
 
@@ -172,8 +175,18 @@ docker compose build --no-cache temporal-ui
 
 ## Skills
 
-See `.agents/skills/temporal-superpower/` for reusable workflows:
-- CLI reference
-- Local development
-- Production checklist
-- Workflow templates
+### Project Skill (canonical)
+- **[skills/temporal-standalone/SKILL.md](skills/temporal-standalone/SKILL.md)** — Orchestrator: routing, constraints, architecture
+  - Workflows:
+    - [enable-feature](skills/temporal-standalone/workflows/enable-feature/SKILL.md) — Namespace capabilities (Standalone Activities)
+    - [fix-api-keys](skills/temporal-standalone/workflows/fix-api-keys/SKILL.md) — Fix 3 bugs: in-memory, JWT, server auth
+    - [server-upgrade](skills/temporal-standalone/workflows/server-upgrade/SKILL.md) — Upgrade + schema migration
+    - [ui-rebuild](skills/temporal-standalone/workflows/ui-rebuild/SKILL.md) — Rebuild UI custom
+    - [namespace-ops](skills/temporal-standalone/workflows/namespace-ops/SKILL.md) — Namespace CRUD
+  - References:
+    - [api-keys-bugs.md](skills/temporal-standalone/reference/api-keys-bugs.md) — Detailed bug reports + fix blueprints
+    - [standalone-activities.md](skills/temporal-standalone/reference/standalone-activities.md) — Feature guide
+    - [routing-matrix.md](skills/temporal-standalone/reference/routing-matrix.md) — Task → workflow mapping
+
+### Installed Blueprints
+- `.agents/skills/workflow-blueprint/` — Agentic workflow scaffolding pattern
