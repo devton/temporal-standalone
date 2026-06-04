@@ -114,49 +114,15 @@ Request arrives
 
 ---
 
-## Bug #3: API Keys Don't Authenticate to Temporal Server (HIGH)
+## Bug #3: API Keys Don't Authenticate to Temporal Server (WON'T FIX)
 
 **Impact**: API keys signed with `JWT_SECRET` (HS256) are accepted by the UI server but NOT by Temporal Server (`:7233`), which validates via Casdoor JWKS (RS256).
 
-This means API keys only work for UI endpoints (`/api/v1/api-keys`), not for SDK/CLI connections to Temporal Server.
+**Decision (2025-05-26): UI-only.** API keys are designed for the Temporal UI HTTP API only. They do NOT grant access to the Temporal Server gRPC endpoint (`:7233`). Rationale:
 
-### Fix Options
+1. Adding HS256 as a second JWT key source on Temporal Server conflicts with existing Casdoor RS256 auth
+2. UI proxy layer adds complexity and latency unnecessary for a local dev standalone
+3. The UI server already proxies all Temporal API calls with valid OIDC tokens
+4. Temporal Cloud itself uses API keys for HTTP API, not for direct gRPC — same pattern
 
-| Option | Complexity | Trade-off |
-|---|---|---|
-| **A: mTLS** | High | Standard Temporal Cloud approach. Client certs instead of tokens. |
-| **B: UI Proxy** | Medium | SDK calls UI, UI proxies to server with OIDC token. Adds latency. |
-| **C: HS256 on Server** | Low | Add JWT_SECRET as valid key on Temporal Server via dynamic config. Same JWT works everywhere. |
-
-### Recommended: Option C (HS256 on Server)
-
-```yaml
-# config/temporal/dynamicconfig/docker.yaml
-frontend.auth:
-  - value: true
-
-frontend.auth.jwtKeyFile:
-  - value: "/etc/temporal/jwt/api-key.pem"
-    # Generate from JWT_SECRET: openssl rand -base64 32
-
-frontend.auth.jwtAlgorithm:
-  - value: "HS256"
-
-frontend.auth.jwtIssuer:
-  - value: "temporal-standalone"
-```
-
-But this conflicts with existing Casdoor RS256 auth. Would need both RS256 (Casdoor) and HS256 (API keys) — Temporal Server supports multiple key sources via `JWT_KEY_SOURCE*` env vars.
-
-### Alternative: Option B (UI Proxy) — Simpler for standalone
-
-Add a proxy endpoint in `api.go`:
-
-```go
-// POST /api/v1/proxy/workflow/...
-// 1. Verify API key JWT (HS256)
-// 2. Extract owner → get their Casdoor token (stored in DB or re-fetch)
-// 3. Forward request to Temporal Server with Casdoor token
-```
-
-No changes needed on Temporal Server itself.
+**Resolution**: Frontend updated to document this scope. Bug #3 closed as "by design".

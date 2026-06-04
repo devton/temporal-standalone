@@ -2,10 +2,13 @@ package route
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -13,27 +16,24 @@ import (
 	"github.com/temporalio/ui-server/v2/server/config"
 )
 
-// APIKey represents an API key for SDK access
 type APIKey struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	KeyID       string    `json:"keyId"`
-	KeySecret   string    `json:"keySecret,omitempty"` // Only returned on creation
+	KeySecret   string    `json:"keySecret,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
 	OwnerID     string    `json:"ownerId"`
 	LastUsedAt  time.Time `json:"lastUsedAt,omitempty"`
 }
 
-// APIKeyCreateRequest is the request body for creating an API key
 type APIKeyCreateRequest struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
 }
 
-// JWT claims for API keys
 type APIKeyClaims struct {
 	jwt.RegisteredClaims
 	KeyID   string `json:"key_id"`
@@ -42,10 +42,12 @@ type APIKeyClaims struct {
 	Type    string `json:"type"`
 }
 
-// In-memory store for API keys (should be replaced with database in production)
-var apiKeysStore = make(map[string]*APIKey)
+var (
+	cacheMu        sync.RWMutex
+	apiKeysCache   = make(map[string]*APIKey)
+	cachePopulated bool
+)
 
-// JWT secret for signing API key tokens (from env JWT_SECRET)
 func getJWTSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -54,7 +56,6 @@ func getJWTSecret() []byte {
 	return []byte(secret)
 }
 
-// generateKeyID generates a random key ID
 func generateKeyID() (string, error) {
 	bytes := make([]byte, 8)
 	if _, err := rand.Read(bytes); err != nil {
@@ -63,7 +64,6 @@ func generateKeyID() (string, error) {
 	return "key_" + hex.EncodeToString(bytes), nil
 }
 
-// generateKeySecret generates a random key secret
 func generateKeySecret() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
@@ -72,7 +72,6 @@ func generateKeySecret() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// generateJWTToken generates a JWT token for the API key
 func generateJWTToken(apiKey *APIKey) (string, error) {
 	claims := APIKeyClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -91,9 +90,7 @@ func generateJWTToken(apiKey *APIKey) (string, error) {
 	return token.SignedString(getJWTSecret())
 }
 
-// getOwnerIDFromContext extracts the owner ID from the auth context
 func getOwnerIDFromContext(c echo.Context) (string, error) {
-	// Try to get UserInfo from context (set by AuthMiddleware)
 	if user := c.Get(UserContextKey); user != nil {
 		if userInfo, ok := user.(*UserInfo); ok {
 			if userInfo.Subject != "" {
@@ -102,14 +99,12 @@ func getOwnerIDFromContext(c echo.Context) (string, error) {
 		}
 	}
 
-	// Fallback: Try to get from JWT claims in context (direct JWT middleware)
 	if user := c.Get("user"); user != nil {
 		if claims, ok := user.(*jwt.Token); ok {
 			if mapClaims, ok := claims.Claims.(jwt.MapClaims); ok {
 				if sub, ok := mapClaims["sub"].(string); ok {
 					return sub, nil
 				}
-				// Try email as fallback
 				if email, ok := mapClaims["email"].(string); ok {
 					return email, nil
 				}
@@ -117,33 +112,116 @@ func getOwnerIDFromContext(c echo.Context) (string, error) {
 		}
 	}
 
-	// No authenticated user found
 	return "", echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
 }
 
-// ListAPIKeys returns all API keys for the current user
+func ensureCache(dbConn *sql.DB) {
+	if cachePopulated {
+		return
+	}
+	if dbConn == nil {
+		return
+	}
+
+	rows, err := dbConn.Query(
+		"SELECT key_id, name, description, key_secret, created_at, expires_at, owner_id FROM api_keys",
+	)
+	if err != nil {
+		log.Printf("[APIKeys] Failed to load keys from DB: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	loaded := make(map[string]*APIKey)
+	for rows.Next() {
+		var k APIKey
+		if err := rows.Scan(&k.KeyID, &k.Name, &k.Description, &k.KeySecret, &k.CreatedAt, &k.ExpiresAt, &k.OwnerID); err != nil {
+			log.Printf("[APIKeys] Failed to scan key row: %v", err)
+			continue
+		}
+		k.ID = k.KeyID
+		loaded[k.KeyID] = &k
+	}
+
+	cacheMu.Lock()
+	for key, val := range loaded {
+		apiKeysCache[key] = val
+	}
+	cachePopulated = true
+	cacheMu.Unlock()
+}
+
+func cacheGet(keyID string) (*APIKey, bool) {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+	k, ok := apiKeysCache[keyID]
+	return k, ok
+}
+
+func cacheSet(keyID string, k *APIKey) {
+	cacheMu.Lock()
+	apiKeysCache[keyID] = k
+	cacheMu.Unlock()
+}
+
+func cacheDelete(keyID string) {
+	cacheMu.Lock()
+	delete(apiKeysCache, keyID)
+	cacheMu.Unlock()
+}
+
 func ListAPIKeys(c echo.Context) error {
 	ownerID, err := getOwnerIDFromContext(c)
 	if err != nil {
 		return err
 	}
 
+	dbConn := getDB()
+	if dbConn != nil {
+		ensureCache(dbConn)
+
+		rows, err := dbConn.Query(
+			"SELECT key_id, name, description, key_secret, created_at, expires_at, owner_id FROM api_keys WHERE owner_id = $1 ORDER BY created_at DESC",
+			ownerID,
+		)
+		if err != nil {
+			log.Printf("[APIKeys] DB query failed, falling back to cache: %v", err)
+			return listFromCache(ownerID, c)
+		}
+		defer rows.Close()
+
+		keys := make([]*APIKey, 0)
+		for rows.Next() {
+			var k APIKey
+			if err := rows.Scan(&k.KeyID, &k.Name, &k.Description, &k.KeySecret, &k.CreatedAt, &k.ExpiresAt, &k.OwnerID); err != nil {
+				continue
+			}
+			k.ID = k.KeyID
+			k.KeySecret = ""
+			keys = append(keys, &k)
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{"keys": keys})
+	}
+
+	return listFromCache(ownerID, c)
+}
+
+func listFromCache(ownerID string, c echo.Context) error {
 	keys := make([]*APIKey, 0)
-	for _, key := range apiKeysStore {
+	cacheMu.RLock()
+	for _, key := range apiKeysCache {
 		if key.OwnerID == ownerID {
-			// Create a copy without the secret
 			keyCopy := *key
 			keyCopy.KeySecret = ""
 			keys = append(keys, &keyCopy)
 		}
 	}
+	cacheMu.RUnlock()
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"keys": keys,
-	})
+	return c.JSON(http.StatusOK, map[string]interface{}{"keys": keys})
 }
 
-// CreateAPIKey creates a new API key
 func CreateAPIKey(c echo.Context) error {
 	var req APIKeyCreateRequest
 	if err := json.NewDecoder(c.Request().Body).Decode(&req); err != nil {
@@ -159,14 +237,14 @@ func CreateAPIKey(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate key ID")
 	}
 
-	keySecret, err := generateKeySecret()
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate key secret")
-	}
-
 	ownerID, err := getOwnerIDFromContext(c)
 	if err != nil {
 		return err
+	}
+
+	var expiresAt sql.NullTime
+	if !req.ExpiresAt.IsZero() {
+		expiresAt = sql.NullTime{Time: req.ExpiresAt, Valid: true}
 	}
 
 	apiKey := &APIKey{
@@ -174,26 +252,39 @@ func CreateAPIKey(c echo.Context) error {
 		Name:        req.Name,
 		Description: req.Description,
 		KeyID:       keyID,
-		KeySecret:   keySecret,
 		CreatedAt:   time.Now(),
 		ExpiresAt:   req.ExpiresAt,
 		OwnerID:     ownerID,
 	}
 
-	// Generate JWT token
 	token, err := generateJWTToken(apiKey)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
 	}
-
-	// Store the token as the key secret
 	apiKey.KeySecret = token
-	apiKeysStore[keyID] = apiKey
+
+	dbConn := getDB()
+	if dbConn != nil {
+		var desc sql.NullString
+		if req.Description != "" {
+			desc = sql.NullString{String: req.Description, Valid: true}
+		}
+
+		_, err = dbConn.Exec(
+			"INSERT INTO api_keys (key_id, name, description, key_secret, expires_at, owner_id) VALUES ($1, $2, $3, $4, $5, $6)",
+			keyID, req.Name, desc, token, expiresAt, ownerID,
+		)
+		if err != nil {
+			log.Printf("[APIKeys] DB insert failed: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to store API key")
+		}
+	}
+
+	cacheSet(keyID, apiKey)
 
 	return c.JSON(http.StatusCreated, apiKey)
 }
 
-// DeleteAPIKey deletes an API key
 func DeleteAPIKey(c echo.Context) error {
 	keyID := c.Param("id")
 	if keyID == "" {
@@ -205,28 +296,49 @@ func DeleteAPIKey(c echo.Context) error {
 		return err
 	}
 
-	key, exists := apiKeysStore[keyID]
-	if !exists {
-		return echo.NewHTTPError(http.StatusNotFound, "API key not found")
+	dbConn := getDB()
+	if dbConn != nil {
+		var dbOwner string
+		err := dbConn.QueryRow("SELECT owner_id FROM api_keys WHERE key_id = $1", keyID).Scan(&dbOwner)
+		if err == sql.ErrNoRows {
+			return echo.NewHTTPError(http.StatusNotFound, "API key not found")
+		}
+		if err != nil {
+			log.Printf("[APIKeys] DB query failed: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to lookup API key")
+		}
+		if dbOwner != ownerID {
+			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		}
+
+		_, err = dbConn.Exec("DELETE FROM api_keys WHERE key_id = $1", keyID)
+		if err != nil {
+			log.Printf("[APIKeys] DB delete failed: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete API key")
+		}
+	} else {
+		key, exists := cacheGet(keyID)
+		if !exists {
+			return echo.NewHTTPError(http.StatusNotFound, "API key not found")
+		}
+		if key.OwnerID != ownerID {
+			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+		}
 	}
 
-	if key.OwnerID != ownerID {
-		return echo.NewHTTPError(http.StatusForbidden, "Access denied")
-	}
-
-	delete(apiKeysStore, keyID)
+	cacheDelete(keyID)
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-// RegisterAPIKeyRoutes registers the API key routes with auth middleware
 func RegisterAPIKeyRoutes(e *echo.Group, cfgProvider *config.ConfigProviderWithRefresh) {
-	// Create auth middleware for API Key routes
+	initDB()
+
 	authMW := AuthMiddleware(cfgProvider)
 
 	api := e.Group("/api-keys", authMW)
 
 	api.GET("", ListAPIKeys)
 	api.POST("", CreateAPIKey)
-	api.DELETE("/:id", DeleteAPIKey)
+	api.DELETE("/:"+"id", DeleteAPIKey)
 }

@@ -33,6 +33,15 @@ frontend.enableUpdateWorkflowExecutionAsyncAccepted:
   - value: true
     constraints: {}
 
+# Standalone Activities (Public Preview, v1.31+)
+activity.enableStandalone:
+  - value: true
+    constraints:
+      namespace: "default"
+  - value: true
+    constraints:
+      namespace: "3b6ae4b6-3dc9-4321-89be-f83a0427d3e9"
+
 # System limits
 limit.history.maxPageSize:
   - value: 10000

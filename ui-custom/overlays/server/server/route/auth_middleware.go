@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/temporalio/ui-server/v2/server/config"
 )
@@ -15,22 +17,25 @@ import (
 const UserContextKey = "user"
 
 type UserInfo struct {
-	Subject string `json:"sub"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
+	Subject  string `json:"sub"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	IsAPIKey bool   `json:"-"`
+	KeyName  string `json:"keyName,omitempty"`
+	KeyID    string `json:"keyId,omitempty"`
 }
 
 func AuthMiddleware(cfgProvider *config.ConfigProviderWithRefresh) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// 1. Try to get user from OIDC session cookies
+			// 1. Try to get user from OIDC session cookies (server-set, safe to parse without verify)
 			userInfo, err := getUserFromCookies(c)
 			if err == nil && userInfo != nil {
 				c.Set(UserContextKey, userInfo)
 				return next(c)
 			}
 
-			// 2. Try Authorization-Extras header (OIDC ID token)
+			// 2. Try Authorization-Extras header (OIDC ID token from browser)
 			idToken := c.Request().Header.Get("Authorization-Extras")
 			if idToken != "" {
 				ui, err := parseUnverifiedJWT(idToken)
@@ -46,6 +51,13 @@ func AuthMiddleware(cfgProvider *config.ConfigProviderWithRefresh) echo.Middlewa
 			if authHeader != "" {
 				tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 				if tokenString != "" {
+					// 3a. Try API key JWT (HS256, issuer == "temporal-standalone")
+					if ui, err := verifyAPIKeyToken(tokenString); err == nil && ui != nil {
+						c.Set(UserContextKey, ui)
+						return next(c)
+					}
+
+					// 3b. Fallback: unverified parse for OIDC Bearer tokens
 					ui, err := parseUnverifiedJWT(tokenString)
 					if err == nil && ui != nil {
 						c.Set(UserContextKey, ui)
@@ -58,6 +70,55 @@ func AuthMiddleware(cfgProvider *config.ConfigProviderWithRefresh) echo.Middlewa
 			return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
 		}
 	}
+}
+
+func verifyAPIKeyToken(tokenString string) (*UserInfo, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "temporal-api-key-secret-change-in-production"
+	}
+
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if t.Method != jwt.SigningMethodHS256 {
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, "unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "invalid API key token")
+	}
+
+	issuer, _ := claims["iss"].(string)
+	if issuer != "temporal-standalone" {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "wrong issuer")
+	}
+
+	tokenType, _ := claims["type"].(string)
+	if tokenType != "api_key" {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "not an API key token")
+	}
+
+	subject, _ := claims["sub"].(string)
+	if subject == "" {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "no subject in token")
+	}
+
+	return &UserInfo{
+		Subject:  subject,
+		IsAPIKey: true,
+		KeyName:  getStringClaim(claims, "key_name"),
+		KeyID:    getStringClaim(claims, "key_id"),
+	}, nil
+}
+
+func getStringClaim(claims jwt.MapClaims, key string) string {
+	v, _ := claims[key].(string)
+	return v
 }
 
 func getUserFromCookies(c echo.Context) (*UserInfo, error) {

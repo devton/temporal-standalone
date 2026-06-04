@@ -18,5 +18,11 @@ services:
       - CASDOOR_CLIENT_SECRET=${CASDOOR_CLIENT_SECRET}
       # JWT secret for API key signing
       - JWT_SECRET=${JWT_SECRET:-change-in-production}
+      # PostgreSQL connection for API keys persistence
+      - POSTGRES_HOST=postgresql
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-temporal}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-temporal}
+      - POSTGRES_DB=${POSTGRES_DB:-temporal}
     networks:
       - temporal-network

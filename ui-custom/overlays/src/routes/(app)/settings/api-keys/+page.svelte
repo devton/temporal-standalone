@@ -147,6 +147,21 @@
 
 <PageTitle>API Keys</PageTitle>
 
+<Panel>
+  <p class="mb-4 text-sm text-subtle">
+    API keys authenticate automation scripts against the Temporal UI HTTP API.
+    They do <strong>not</strong> grant access to the Temporal Server gRPC endpoint
+    (<code class="rounded bg-surface-secondary px-1 text-xs">:7233</code>).
+  </p>
+  <div
+    class="mb-4 rounded border border-secondary bg-surface-secondary p-3 text-xs"
+  >
+    <p class="mb-1 font-medium text-primary">Usage</p>
+    <code class="text-subtle">curl -H "Authorization: Bearer &lt;token&gt;"
+      http://&lt;host&gt;:8080/api/v1/&hellip;</code>
+  </div>
+</Panel>
+
 {#if error}
   <div class="mb-4 rounded bg-red-500/10 p-4 text-sm text-red-500">{error}</div>
 {/if}

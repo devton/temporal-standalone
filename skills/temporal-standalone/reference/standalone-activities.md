@@ -33,72 +33,37 @@ temporal activity execute \
 
 ## How to Enable
 
-Standalone Activities is a **namespace capability**, not a dynamic config flag. It must be set via gRPC `UpdateNamespace`.
+Standalone Activities is controlled by a **dynamic config key**, NOT by a gRPC `UpdateNamespace` call.
+The `standaloneActivities` field in `DescribeNamespace` response is dynamically computed from the server's config at query time — it's not stored in the database.
 
-### Method 1: grpcurl (quick test)
+**Config key:** `activity.enableStandalone` (default: `false`)
 
+Source: `chasm/lib/activity/config.go` in Temporal Server v1.31.0
+
+### Method: Dynamic Config YAML
+
+Add to `config/temporal/dynamicconfig/docker.yaml`:
+
+```yaml
+activity.enableStandalone:
+  - value: true
+    constraints:
+      namespace: "default"
+  - value: true
+    constraints:
+      namespace: "<namespace-name-or-id>"
+```
+
+The key supports `NamespaceBoolSetting` — you can enable per-namespace or use empty constraints to enable globally.
+
+After editing, restart the server:
 ```bash
-# Install grpcurl if needed
-# Then call UpdateNamespace with capability
-
-grpcurl -plaintext \
-  -d '{
-    "namespace": "default",
-    "updateMask": {"paths": ["postUpdateSpec"]},
-    "postUpdateSpec": {
-      "capabilities": {
-        "standaloneActivities": true
-      }
-    }
-  }' \
-  192.168.2.68:7233 \
-  temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace
+docker restart temporal-server
 ```
 
-**Note**: The exact proto field path may differ. Check `temporal.api.namespace.v1.NamespaceInfo.capabilities` in the proto definitions.
+### Why gRPC UpdateNamespace doesn't work
 
-### Method 2: Go script (recommended)
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-
-    "go.temporal.io/api/workflowservice/v1"
-    "go.temporal.io/sdk/client"
-)
-
-func main() {
-    c, err := client.Dial(client.Options{
-        HostPort: "192.168.2.68:7233",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer c.Close()
-
-    // UpdateNamespace with standalone_activities capability
-    ctx := context.Background()
-    _, err = c.WorkflowService().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
-        Namespace: "default",
-        // ... capabilities config
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-    fmt.Println("Standalone Activities enabled!")
-}
-```
-
-### Method 3: Wait for CLI support
-
-Temporal CLI v1.7.0+ may add a flag like:
-```bash
-temporal operator namespace update default --enable-standalone-activities
-```
+`UpdateNamespaceRequest` only exposes `update_info` (description, owner, data, state) and `config` — neither contains a `capabilities` field. The `capabilities` struct on `NamespaceInfo` (proto field 7) is read-only/computed server-side from dynamic config.
 
 ## Verification
 
