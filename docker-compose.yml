@@ -70,7 +70,7 @@ services:
   # which resets namespace retention and archival settings.
   # ============================================
   temporal:
-    image: temporalio/server:1.31.0
+    image: temporalio/server:1.31.2
     container_name: temporal-server
     depends_on:
       postgresql:
@@ -134,7 +134,7 @@ services:
   # Temporal Web UI (com OIDC)
   # ============================================
   temporal-ui:
-    image: temporalio/ui:2.49.1
+    image: temporalio/ui:2.52.0
     container_name: temporal-ui
     depends_on:
       temporal:
