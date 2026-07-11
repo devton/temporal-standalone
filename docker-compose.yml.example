@@ -70,7 +70,10 @@ services:
   # which resets namespace retention and archival settings.
   # ============================================
   temporal:
-    image: temporalio/server:1.31.2
+    build:
+      context: ./temporal-server-custom
+      dockerfile: Dockerfile
+    image: temporal-server-custom:latest
     container_name: temporal-server
     depends_on:
       postgresql:
@@ -94,10 +97,20 @@ services:
       - VISIBILITY_DBNAME=temporal_visibility
       # Dynamic config
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/docker.yaml
-      # OIDC Authentication (via Casdoor)
+      # JWT Key Sources (Casdoor + UI server JWKS for API keys)
       - TEMPORAL_JWT_KEY_SOURCE1=http://${TEMPORAL_HOST:-localhost}:${CASDOOR_PORT:-8000}/.well-known/jwks
+      - TEMPORAL_JWT_KEY_SOURCE2=http://temporal-ui:8080/.well-known/jwks.json
+      - JWT_KEY_SOURCE1=http://${TEMPORAL_HOST:-localhost}:${CASDOOR_PORT:-8000}/.well-known/jwks
+      - JWT_KEY_SOURCE2=http://temporal-ui:8080/.well-known/jwks.json
+      - BROADCAST_ADDRESS=127.0.0.1
+      - BIND_ON_IP=0.0.0.0
+      - TEMPORAL_ROOT=/etc/temporal
+      - TEMPORAL_CONFIG_DIR=config
+      - TEMPORAL_ENVIRONMENT=docker
+      - TEMPORAL_SERVICES=frontend,internal-frontend,history,matching,worker
     volumes:
       - ./config/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+      - ./temporal-server-custom/config_template.yaml:/etc/temporal/config/docker.yaml:ro
     ports:
       - "${TEMPORAL_SERVER_PORT:-7233}:7233"
     networks:

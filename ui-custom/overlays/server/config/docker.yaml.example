@@ -1,7 +1,7 @@
 # enable-template
 # Temporal UI Config - OIDC via environment variables
 
-temporalGrpcAddress: temporal:7233
+temporalGrpcAddress: temporal:7236
 port: 8080
 enableUi: true
 cloudUi: false

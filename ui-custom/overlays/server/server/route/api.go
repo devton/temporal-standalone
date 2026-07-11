@@ -89,5 +89,8 @@ func SetAPIRoutes(e *echo.Echo, cfgProvider *config.ConfigProviderWithRefresh, a
 	// Register namespace-per-user routes (auto-create user namespace)
 	RegisterNamespaceUserRoutes(route, conn, cfgProvider)
 
+	// JWKS endpoint — public, no auth (Temporal Server fetches our public keys)
+	e.GET("/.well-known/jwks.json", HandleJWKS)
+
 	return nil
 }

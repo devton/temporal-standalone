@@ -1,0 +1,127 @@
+global:
+  membership:
+    name: temporal
+    maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
+  pprof:
+    port: 7933
+  authorization:
+    authorizer: "default"
+    claimMapper: "default"
+    permissionsClaimName: "permissions"
+    jwtKeyProvider:
+      keySourceURIs:
+        - "http://casdoor:8000/.well-known/jwks"
+        - "http://temporal-ui:8080/.well-known/jwks.json"
+      refreshInterval: "1m"
+
+log:
+  stdout: true
+  level: "info"
+
+persistence:
+  numHistoryShards: 4
+  defaultStore: default
+  visibilityStore: visibility
+  datastores:
+    default:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "temporal"
+        connectAddr: "postgresql:5432"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+    visibility:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "temporal_visibility"
+        connectAddr: "postgresql:5432"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnIP: "0.0.0.0"
+    reflector:
+      grpcReflectionEnabled: true
+  internal-frontend:
+    rpc:
+      grpcPort: 7236
+      membershipPort: 6940
+      bindOnIP: "0.0.0.0"
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnIP: "0.0.0.0"
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnIP: "0.0.0.0"
+  worker:
+    rpc:
+      grpcPort: 7239
+      membershipPort: 6939
+      bindOnIP: "0.0.0.0"
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 0
+      rpcName: "temporal"
+      rpcAddress: "127.0.0.1:7933"
+  namespaceDefaults:
+    .local:
+      replication:
+        type: Local
+        activeClusterName: "active"
+    global:
+      replication:
+        type: Global
+        activeClusterName: "active"
+
+dcRedirectionPolicy:
+  policy: "noop"
+
+archival:
+  history:
+    state: "disabled"
+    enableRead: false
+  visibility:
+    state: "disabled"
+    enableRead: false
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+    visibility:
+      state: "disabled"
+
+authentication:
+  jwtKeyProvider:
+    keySourceURIs:
+      - "http://casdoor:8000/.well-known/jwks"
+      - "http://temporal-ui:8080/.well-known/jwks.json"
+    refreshInterval: "1m"
+
+dynamicConfigClient:
+  filepath: "/etc/temporal/config/dynamicconfig/docker.yaml"
+  pollInterval: "10s"

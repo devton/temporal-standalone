@@ -1,6 +1,12 @@
 # Environment
 .env
 
+# Local overrides (copy from .example files via setup.sh)
+docker-compose.yml
+docker-compose.override.yml
+temporal-server-custom/config_template.yaml
+ui-custom/overlays/server/config/docker.yaml
+
 # Secrets
 config/jwt/token.txt
 
@@ -47,3 +53,4 @@ ui-custom/.editorconfig
 ui-custom/.storybook/
 ui-custom/pnpm-lock.yaml
 ui-custom/tests/
+*.backup-*

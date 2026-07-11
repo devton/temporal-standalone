@@ -2,12 +2,18 @@ package route
 
 import (
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"log"
+	"math/big"
 	"net/http"
-	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +28,7 @@ type APIKey struct {
 	Description string    `json:"description,omitempty"`
 	KeyID       string    `json:"keyId"`
 	KeySecret   string    `json:"keySecret,omitempty"`
+	Namespace   string    `json:"namespace"`
 	CreatedAt   time.Time `json:"createdAt"`
 	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
 	OwnerID     string    `json:"ownerId"`
@@ -31,15 +38,18 @@ type APIKey struct {
 type APIKeyCreateRequest struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
+	Namespace   string    `json:"namespace"`
 	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
 }
 
 type APIKeyClaims struct {
 	jwt.RegisteredClaims
-	KeyID   string `json:"key_id"`
-	KeyName string `json:"key_name"`
-	OwnerID string `json:"owner_id"`
-	Type    string `json:"type"`
+	KeyID       string   `json:"key_id"`
+	KeyName     string   `json:"key_name"`
+	OwnerID     string   `json:"owner_id"`
+	Namespace   string   `json:"namespace"`
+	Permissions []string `json:"permissions"`
+	Type        string   `json:"type"`
 }
 
 var (
@@ -48,12 +58,53 @@ var (
 	cachePopulated bool
 )
 
-func getJWTSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "temporal-api-key-secret-change-in-production"
+// HandleJWKS serves the public keys for all active API keys.
+// When a key is deleted, it disappears from this endpoint,
+// causing the Temporal Server to reject its JWTs within the next
+// JWKS refresh cycle (default 1 minute).
+func HandleJWKS(c echo.Context) error {
+	dbConn := getDB()
+
+	var jwkKeys []map[string]interface{}
+
+	if dbConn != nil {
+		rows, err := dbConn.Query("SELECT jwks_kid, public_key FROM api_keys WHERE jwks_kid IS NOT NULL AND public_key IS NOT NULL AND public_key != ''")
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var kid, pubPEM string
+				if err := rows.Scan(&kid, &pubPEM); err != nil {
+					continue
+				}
+				block, _ := pem.Decode([]byte(pubPEM))
+				if block == nil {
+					continue
+				}
+				pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+				if err != nil {
+					continue
+				}
+				rsaPub, ok := pubKey.(*rsa.PublicKey)
+				if !ok {
+					continue
+				}
+				jwkKeys = append(jwkKeys, map[string]interface{}{
+					"kty": "RSA",
+					"use": "sig",
+					"alg": "RS256",
+					"kid": kid,
+					"n":   base64.RawURLEncoding.EncodeToString(rsaPub.N.Bytes()),
+					"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(rsaPub.E)).Bytes()),
+				})
+			}
+		}
 	}
-	return []byte(secret)
+
+	if jwkKeys == nil {
+		jwkKeys = []map[string]interface{}{}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{"keys": jwkKeys})
 }
 
 func generateKeyID() (string, error) {
@@ -64,30 +115,68 @@ func generateKeyID() (string, error) {
 	return "key_" + hex.EncodeToString(bytes), nil
 }
 
-func generateKeySecret() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
+func generateUniqueKID() string {
+	bytes := make([]byte, 10)
+	rand.Read(bytes)
+	return "apk_" + hex.EncodeToString(bytes)
 }
 
-func generateJWTToken(apiKey *APIKey) (string, error) {
-	claims := APIKeyClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   apiKey.KeyID,
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(apiKey.ExpiresAt),
-			Issuer:    "temporal-standalone",
-		},
-		KeyID:   apiKey.KeyID,
-		KeyName: apiKey.Name,
-		OwnerID: apiKey.OwnerID,
-		Type:    "api_key",
+// generateAPIKeyJWT creates a unique RSA key pair for this API key,
+// signs the JWT with the private key, and stores the public key in
+// the database so it appears in the JWKS endpoint. Deleting the API
+// key removes the public key from JWKS, revoking the token.
+func generateAPIKeyJWT(apiKey *APIKey) (string, error) {
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate RSA key: %w", err)
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(getJWTSecret())
+	kid := generateUniqueKID()
+
+	exp := apiKey.ExpiresAt
+	if exp.IsZero() {
+		exp = time.Now().Add(365 * 24 * time.Hour)
+	}
+
+	permissions := []string{apiKey.Namespace + ":admin"}
+
+	claims := APIKeyClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   kid,
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(exp),
+			Issuer:    "temporal-ui",
+			Audience:  []string{"temporal"},
+		},
+		KeyID:       kid,
+		KeyName:     apiKey.Name,
+		OwnerID:     apiKey.OwnerID,
+		Namespace:   apiKey.Namespace,
+		Permissions: permissions,
+		Type:        "api_key",
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = kid
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal public key: %w", err)
+	}
+	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubKeyBytes})
+
+	dbConn := getDB()
+	if dbConn != nil {
+		_, err = dbConn.Exec(
+			"UPDATE api_keys SET jwks_kid = $1, public_key = $2 WHERE key_id = $3",
+			kid, string(pubPEM), apiKey.ID,
+		)
+		if err != nil {
+			log.Printf("[APIKeys] Failed to store JWKS key: %v", err)
+		}
+	}
+
+	return token.SignedString(privKey)
 }
 
 func getOwnerIDFromContext(c echo.Context) (string, error) {
@@ -124,7 +213,7 @@ func ensureCache(dbConn *sql.DB) {
 	}
 
 	rows, err := dbConn.Query(
-		"SELECT key_id, name, description, key_secret, created_at, expires_at, owner_id FROM api_keys",
+		"SELECT key_id, name, description, key_hash, namespace, created_at, expires_at, owner_id FROM api_keys",
 	)
 	if err != nil {
 		log.Printf("[APIKeys] Failed to load keys from DB: %v", err)
@@ -135,9 +224,16 @@ func ensureCache(dbConn *sql.DB) {
 	loaded := make(map[string]*APIKey)
 	for rows.Next() {
 		var k APIKey
-		if err := rows.Scan(&k.KeyID, &k.Name, &k.Description, &k.KeySecret, &k.CreatedAt, &k.ExpiresAt, &k.OwnerID); err != nil {
+		var desc, keyHash, ns sql.NullString
+		var exp sql.NullTime
+		if err := rows.Scan(&k.KeyID, &k.Name, &desc, &keyHash, &ns, &k.CreatedAt, &exp, &k.OwnerID); err != nil {
 			log.Printf("[APIKeys] Failed to scan key row: %v", err)
 			continue
+		}
+		k.Description = desc.String
+		k.Namespace = ns.String
+		if exp.Valid {
+			k.ExpiresAt = exp.Time
 		}
 		k.ID = k.KeyID
 		loaded[k.KeyID] = &k
@@ -181,7 +277,7 @@ func ListAPIKeys(c echo.Context) error {
 		ensureCache(dbConn)
 
 		rows, err := dbConn.Query(
-			"SELECT key_id, name, description, key_secret, created_at, expires_at, owner_id FROM api_keys WHERE owner_id = $1 ORDER BY created_at DESC",
+			"SELECT key_id, name, description, key_hash, namespace, created_at, expires_at, owner_id FROM api_keys WHERE owner_id = $1 ORDER BY created_at DESC",
 			ownerID,
 		)
 		if err != nil {
@@ -193,9 +289,13 @@ func ListAPIKeys(c echo.Context) error {
 		keys := make([]*APIKey, 0)
 		for rows.Next() {
 			var k APIKey
-			if err := rows.Scan(&k.KeyID, &k.Name, &k.Description, &k.KeySecret, &k.CreatedAt, &k.ExpiresAt, &k.OwnerID); err != nil {
+			var description, keyHash, namespace, expiresAt sql.NullString
+			if err := rows.Scan(&k.KeyID, &k.Name, &description, &keyHash, &namespace, &k.CreatedAt, &expiresAt, &k.OwnerID); err != nil {
+				log.Printf("[APIKeys] Failed to scan key row: %v", err)
 				continue
 			}
+			k.Description = description.String
+			k.Namespace = namespace.String
 			k.ID = k.KeyID
 			k.KeySecret = ""
 			keys = append(keys, &k)
@@ -232,6 +332,10 @@ func CreateAPIKey(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Name is required")
 	}
 
+	if req.Namespace == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Namespace is required")
+	}
+
 	keyID, err := generateKeyID()
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate key ID")
@@ -247,22 +351,6 @@ func CreateAPIKey(c echo.Context) error {
 		expiresAt = sql.NullTime{Time: req.ExpiresAt, Valid: true}
 	}
 
-	apiKey := &APIKey{
-		ID:          keyID,
-		Name:        req.Name,
-		Description: req.Description,
-		KeyID:       keyID,
-		CreatedAt:   time.Now(),
-		ExpiresAt:   req.ExpiresAt,
-		OwnerID:     ownerID,
-	}
-
-	token, err := generateJWTToken(apiKey)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
-	}
-	apiKey.KeySecret = token
-
 	dbConn := getDB()
 	if dbConn != nil {
 		var desc sql.NullString
@@ -271,13 +359,35 @@ func CreateAPIKey(c echo.Context) error {
 		}
 
 		_, err = dbConn.Exec(
-			"INSERT INTO api_keys (key_id, name, description, key_secret, expires_at, owner_id) VALUES ($1, $2, $3, $4, $5, $6)",
-			keyID, req.Name, desc, token, expiresAt, ownerID,
+			"INSERT INTO api_keys (key_id, name, description, key_hash, namespace, expires_at, owner_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+			keyID, req.Name, desc, "", req.Namespace, expiresAt, ownerID,
 		)
 		if err != nil {
 			log.Printf("[APIKeys] DB insert failed: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to store API key")
 		}
+	}
+
+	apiKey := &APIKey{
+		ID:          keyID,
+		Name:        req.Name,
+		Description: req.Description,
+		KeyID:       keyID,
+		Namespace:   req.Namespace,
+		CreatedAt:   time.Now(),
+		ExpiresAt:   req.ExpiresAt,
+		OwnerID:     ownerID,
+	}
+
+	token, err := generateAPIKeyJWT(apiKey)
+	if err != nil {
+		log.Printf("[APIKeys] Failed to generate token: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
+	}
+	apiKey.KeySecret = token
+
+	if dbConn != nil {
+		_, _ = dbConn.Exec("UPDATE api_keys SET key_hash = $1 WHERE key_id = $2", token, keyID)
 	}
 
 	cacheSet(keyID, apiKey)
@@ -316,6 +426,8 @@ func DeleteAPIKey(c echo.Context) error {
 			log.Printf("[APIKeys] DB delete failed: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete API key")
 		}
+
+		log.Printf("[APIKeys] Key %s deleted — JWKS will no longer contain its kid", keyID)
 	} else {
 		key, exists := cacheGet(keyID)
 		if !exists {
@@ -333,6 +445,7 @@ func DeleteAPIKey(c echo.Context) error {
 
 func RegisterAPIKeyRoutes(e *echo.Group, cfgProvider *config.ConfigProviderWithRefresh) {
 	initDB()
+	ensureAPIMigrations()
 
 	authMW := AuthMiddleware(cfgProvider)
 
@@ -340,5 +453,35 @@ func RegisterAPIKeyRoutes(e *echo.Group, cfgProvider *config.ConfigProviderWithR
 
 	api.GET("", ListAPIKeys)
 	api.POST("", CreateAPIKey)
-	api.DELETE("/:"+"id", DeleteAPIKey)
+	api.DELETE("/:id", DeleteAPIKey)
+}
+
+// Ensure migrations for per-key JWKS columns
+func ensureAPIMigrations() {
+	dbConn := getDB()
+	if dbConn == nil {
+		return
+	}
+	// Add columns for per-key JWKS
+	_, err := dbConn.Exec("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS jwks_kid TEXT")
+	if err != nil {
+		log.Printf("[APIKeys] ALTER jwks_kid: %v", err)
+	}
+	_, err = dbConn.Exec("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS public_key TEXT")
+	if err != nil {
+		log.Printf("[APIKeys] ALTER public_key: %v", err)
+	}
+	_, err = dbConn.Exec("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_hash TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			log.Printf("[APIKeys] ALTER key_hash: %v", err)
+		}
+	}
+	_, err = dbConn.Exec("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS namespace TEXT NOT NULL DEFAULT ''")
+	if err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			log.Printf("[APIKeys] ALTER namespace: %v", err)
+		}
+	}
+	log.Println("[APIKeys] Migrations complete — per-key JWKS ready")
 }

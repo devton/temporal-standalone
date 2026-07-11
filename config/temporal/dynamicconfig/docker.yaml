@@ -15,15 +15,6 @@ namespace.defaultRetention:
   - value: 2592000s
     constraints: {}
 
-# Allow archive for default namespace
-archival.defaultNamespace.history.archivalState:
-  - value: "enabled"
-    constraints: {}
-
-archival.defaultNamespace.visibility.archivalState:
-  - value: "enabled"
-    constraints: {}
-
 # Frontend settings
 frontend.enableUpdateWorkflowExecution:
   - value: true
@@ -50,31 +41,3 @@ limit.history.maxPageSize:
 limit.history.maxSearchAttributes:
   - value: 100
     constraints: {}
-
-# ============================================
-# JWT Authentication (UI only)
-# Configure TEMPORAL_UI_AUTH_* in docker-compose for UI
-# ============================================
-# frontend.auth:
-#   - value: true
-#     constraints: {}
-
-# frontend.auth.jwtKeyFile:
-#   - value: "/etc/temporal/jwt/key.pub"
-#     constraints: {}
-
-# frontend.auth.jwtAlgorithm:
-#   - value: "RS256"
-#     constraints: {}
-
-# frontend.auth.jwtIssuer:
-#   - value: "temporal-standalone"
-#     constraints: {}
-
-# frontend.auth.jwtAudience:
-#   - value: "temporal"
-#     constraints: {}
-
-# frontend.auth.jwtClaimMapping:
-#   - value: "sub"
-#     constraints: {}
